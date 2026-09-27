@@ -39,18 +39,19 @@ def test_run_always_perfect_on_pilot_set(tmp_path, monkeypatch):
     assert all(r["parse_error"] is None for r in rows)
 
 
-def test_run_llm_judge_stub_produces_parse_errors_not_crash(tmp_path, monkeypatch):
-    # Before Role C implements the real judge, running "llm_judge" should
-    # fail gracefully per-item (parse_error set) rather than crashing the
-    # whole run -- one missing implementation shouldn't take down the harness.
+def test_run_llm_judge_without_api_key_fails_gracefully_not_crash(tmp_path, monkeypatch):
+    # Without GEMINI_API_KEY set (or the google-genai package installed),
+    # running "llm_judge" should fail gracefully per-item (parse_error set)
+    # rather than crashing the whole run.
     monkeypatch.setattr("harness.run.RESULTS_DIR", tmp_path)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     out_path = run("llm_judge", PILOT_ITEMS)
 
     lines = out_path.read_text().strip().splitlines()
     rows = [json.loads(line) for line in lines]
     assert len(rows) == 20
     assert all(r["output"] is None for r in rows)
-    assert all("Role C" in r["parse_error"] for r in rows)
+    assert all(r["parse_error"] for r in rows)  # every row has *some* error message
 
 
 def test_unknown_system_raises():

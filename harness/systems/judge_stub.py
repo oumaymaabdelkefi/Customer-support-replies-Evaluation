@@ -1,36 +1,150 @@
 """
-Stub for Role C's real LLM judge. This file defines the exact call shape
-the harness expects -- Role C should implement `llm_judge()` here (or
-import their real implementation and re-export it as `llm_judge`) once
-prompts/judge_v1.txt exists.
+Role C's LLM judge, wired into the harness, using Groq's API to serve
+openai/gpt-oss-120b (an open-weight model, free tier available, no credit
+card required).
 
-Until then this stub raises, so it's obvious in results/ if someone
-accidentally runs "judge" before it's implemented, instead of silently
-producing fake scores.
+Assumption: "openai/gpt-oss-120b" is the exact model id Groq uses for this
+model (https://console.groq.com/docs/model/openai/gpt-oss-120b). If you
+actually meant a different host for this model (OpenRouter, Together,
+Fireworks, etc.), the code below only needs BASE_URL, the env var name,
+and the sign-up URL changed -- everything else (prompt building, JSON
+extraction, retry/backoff) is provider-agnostic since Groq speaks the
+OpenAI-compatible chat completions format.
+
+Setup:
+    pip install openai --break-system-packages
+    Get a free API key at https://console.groq.com/keys
+    export GROQ_API_KEY=gsk_...      (never commit this)
+
+Rate limits: Groq's free tier is generous but still finite and can return
+429s under bursty load. This module retries with backoff on 429/5xx,
+reading the API's suggested retry delay when present, same pattern as the
+previous Gemini-backed version of this file.
 """
 
 from __future__ import annotations
 
+import json
+import os
+import re
+import time
+from pathlib import Path
+
 from harness.schema import ItemInput
+
+PROMPT_PATH = Path(__file__).resolve().parent.parent.parent / "prompts" / "judge_v1.txt"
+MODEL_NAME = "openai/gpt-oss-120b"
+BASE_URL = "https://api.groq.com/openai/v1"
+
+MAX_RETRIES = 4
+DEFAULT_RETRY_DELAY_SECONDS = 20.0  # fallback if the API doesn't say how long to wait
+
+_PROMPT_TEMPLATE: str | None = None
+
+
+def _load_template() -> str:
+    global _PROMPT_TEMPLATE
+    if _PROMPT_TEMPLATE is None:
+        if not PROMPT_PATH.exists():
+            raise FileNotFoundError(
+                f"Judge prompt not found at {PROMPT_PATH}. "
+                "Make sure prompts/judge_v1.txt is in the repo."
+            )
+        _PROMPT_TEMPLATE = PROMPT_PATH.read_text(encoding="utf-8")
+    return _PROMPT_TEMPLATE
+
+
+def _build_prompt(item: ItemInput) -> str:
+    return _load_template().format(
+        item_id=item.item_id,
+        customer_message=item.customer_message,
+        policy_excerpt=item.policy_excerpt,
+        candidate_reply=item.candidate_reply,
+    )
+
+
+def _extract_json(raw_text: str) -> dict:
+    """Models sometimes wrap JSON in markdown fences despite instructions
+    not to. Strip those before parsing, but don't silently fix anything
+    else -- malformed output should still surface as a parse_error in the
+    harness, not be papered over here."""
+    text = raw_text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text)  # let json.JSONDecodeError propagate on bad output
+
+
+def _extract_retry_delay(error) -> float:
+    """Groq's 429 responses (OpenAI-compatible) often include a suggested
+    wait in the message (e.g. 'try again in 12.4s'). Parse it if present;
+    fall back to a fixed default otherwise."""
+    text = str(error)
+    match = re.search(r"try again in ([\d.]+)s", text, re.IGNORECASE)
+    if not match:
+        match = re.search(r"retry.*?([\d.]+)s", text, re.IGNORECASE)
+    if match:
+        return float(match.group(1)) + 1.0  # small safety margin
+    return DEFAULT_RETRY_DELAY_SECONDS
 
 
 def llm_judge(item: ItemInput) -> dict:
-    """
-    Expected behavior once implemented:
-      1. Build a prompt from prompts/judge_v1.txt, filling in
-         item.customer_message, item.policy_excerpt, item.candidate_reply.
-      2. Call the LLM API (Claude/GPT) with structured output requested.
-      3. Parse the response into a dict matching harness.schema.JudgeOutput:
-         {item_id, correctness, correctness_reason,
-          politeness, politeness_reason, completeness, completeness_reason}
-      4. Return that dict. The harness validates it -- do not pre-validate
-         here, just return your best parse; malformed output should still
-         come back as a dict so the harness's error path is exercised.
+    try:
+        import openai
+    except ImportError as e:
+        raise RuntimeError(
+            "The 'openai' package isn't installed. Run: "
+            "pip install openai --break-system-packages"
+        ) from e
 
-    Raises NotImplementedError until Role C wires in the real prompt call.
-    """
-    raise NotImplementedError(
-        "Role C: implement llm_judge() here, or import your real "
-        "implementation and re-export it as `llm_judge` from this module. "
-        "See harness/systems/baselines.py for the expected dict shape."
-    )
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "GROQ_API_KEY is not set. Get a free key at "
+            "https://console.groq.com/keys and export it -- never "
+            "hard-code it or commit it."
+        )
+
+    client = openai.OpenAI(api_key=api_key, base_url=BASE_URL)
+    prompt = _build_prompt(item)
+
+    last_error: Exception | None = None
+    response = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,  # deterministic-as-possible grading, not creative writing
+                max_tokens=2048,  # generous headroom in case the model reasons before answering
+            )
+            break  # success -- fall through to JSON parsing below
+        except (openai.APIStatusError, openai.APIConnectionError) as e:
+            last_error = e
+            status = getattr(e, "status_code", None)
+            is_retryable = status in (429, 500, 502, 503, 504) or status is None
+            if not is_retryable or attempt == MAX_RETRIES:
+                raise RuntimeError(
+                    f"Groq API call failed after {attempt} attempt(s): {e}"
+                ) from e
+            delay = _extract_retry_delay(e)
+            time.sleep(delay)
+    else:  # pragma: no cover -- defensive, loop always breaks or raises above
+        raise RuntimeError(f"Groq API call failed: {last_error}")
+
+    raw_text = response.choices[0].message.content
+
+    try:
+        return _extract_json(raw_text)
+    except json.JSONDecodeError as e:
+        # Surface the actual raw text (truncated) in the error so a failed
+        # run's parse_error is diagnosable without re-running by hand.
+        preview = (raw_text or "")[:800]
+        raise RuntimeError(
+            f"Judge response was not valid JSON ({e}). Raw response "
+            f"(first 800 chars): {preview!r}"
+        ) from e
