@@ -21,3 +21,30 @@ No score history yet since this is the first version. Once labeler 2
 finishes and data/golden_set.jsonl has real human labels, the first
 real judge-vs-human agreement run becomes the v1 baseline to beat with
 future prompt revisions.
+
+## judge_v1 -- 2026-09-28 (implementation notes, no prompt-text change)
+
+Two non-prompt fixes landed while wiring judge_v1 into a real API. Neither
+changes the prompt's wording, so this stays v1 -- logged here for
+traceability since both affected whether the prompt could even run.
+
+- Fixed a bug in the "Output format" JSON example block: literal `{` `}`
+  characters collided with Python's `str.format()` placeholder syntax and
+  raised a KeyError before any API call was made. Escaped to `{{` `}}`.
+  Verified by filling all 4 placeholders (item_id, customer_message,
+  policy_excerpt, candidate_reply) against a real item.
+- Switched the judge's backing model from Gemini (`gemini-3.8-flash`,
+  free-tier rate limit of 5 req/min, caused repeated 429s and required
+  aggressive throttling/retry logic) to `openai/gpt-oss-120b` served by
+  Groq's free-tier OpenAI-compatible API. Same prompt text, same JSON
+  schema, same retry-on-429 handling -- only the API client and env var
+  changed (`GEMINI_API_KEY` -> `GROQ_API_KEY`). Result: 20/20 pilot items
+  and 48/48 golden-set items parsed cleanly with no throttling needed,
+  versus repeated truncation/rate-limit failures on the Gemini free tier.
+
+First real judge-vs-human agreement run (Groq-backed judge_v1 vs.
+Labeler 1, pilot set, 20 items): correctness kappa 0.813, politeness
+kappa 0.810, completeness kappa 0.688 -- all above the brief's 0.6
+target. This is now the v1 baseline; a future prompt revision (v2) should
+be compared against these numbers on the same 20 items before being
+adopted.
