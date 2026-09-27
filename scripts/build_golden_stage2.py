@@ -1,0 +1,235 @@
+"""
+One-off generator script for golden_sample_stage2 (G29-G58): writes
+data/golden_sample_stage2.jsonl. Kept as a script (rather than hand-editing
+JSONL) so the item list is easy to review/diff in a PR, same spirit as
+scripts/merge_golden_set.py.
+
+Every item is grounded in a specific policy_technest.md rule id and
+carries an internal challenge_type + author_note (stripped by
+harness/run.py's INPUT_FIELDS before scoring -- these are design notes,
+not something a labeler should read first).
+"""
+import json
+from pathlib import Path
+
+OUT_PATH = Path(__file__).resolve().parent.parent / "data" / "golden_sample_stage2.jsonl"
+
+RET1 = "[RET-1] Items may be returned within 30 calendar days of delivery for a full refund of the item price, provided the item is unused, in its original packaging, and includes all accessories and manuals."
+RET2 = "[RET-2] TechNest pays return shipping only when the return is due to a defective or damaged item (see Damaged Products). For a return that is not due to a defect (e.g., changed mind, wrong size), the customer pays return shipping, unless the original order total was $100 or more, in which case TechNest provides a free prepaid return label."
+RET3 = "[RET-3] Opened software licenses, digital gift cards, and items marked \"final sale\" at checkout cannot be returned."
+RET4 = "[RET-4] Once TechNest receives and inspects a returned item, the refund is issued to the original payment method within 5-7 business days."
+RET5 = "[RET-5] An order can be cancelled at no charge at any time before it ships. Once an order's status is \"Shipped,\" it can no longer be cancelled; the customer must wait for delivery and then request a standard return instead."
+DMG1 = "[DMG-1] Damage or defects present on arrival must be reported within 7 calendar days of delivery, with photos of the item and its packaging attached to the support request."
+DMG3 = "[DMG-3] If the same model is out of stock for a replacement, the customer may choose between a full refund or a substitute item of equivalent value."
+DMG4 = "[DMG-4] Damage caused by the customer after delivery (drops, spills, misuse, etc.) is not covered by this policy. The customer should be directed to the manufacturer's warranty, if any, instead of being offered a free TechNest replacement."
+DMG5 = "[DMG-5] A damage report made more than 7 days after delivery is not eligible under this section, though the item may still qualify for a standard return under RET-1 if within 30 days and otherwise unused (which will rarely apply to a damaged item, since \"unused, original condition\" is required)."
+DMG6 = "[DMG-6] Support cannot promise an exact replacement delivery date; standard replacement shipping takes 3-5 business days after verification."
+SHIP1 = "[SHIP-1] Standard shipping (3-7 business days) is free on orders of $50 or more; otherwise a flat $6.99 fee applies. Express shipping (1-2 business days) costs $14.99 regardless of order size."
+SHIP2 = "[SHIP-2] TechNest currently ships only to the countries listed at checkout. Support may confirm whether a specific country is supported, but must not promise shipping to a country not listed at checkout."
+SHIP3 = "[SHIP-3] A shipping address can be changed by the customer or by support only while the order status is \"Processing.\" Once the status is \"Shipped,\" neither TechNest nor the customer can change the delivery address; the customer must contact the carrier directly."
+SHIP4 = "[SHIP-4] Support does not have live parcel-location data and cannot guarantee an exact delivery date. Customers should use the tracking link emailed at the time of shipment."
+SHIP5 = "[SHIP-5] If tracking shows no movement for 10 or more business days, the package is considered lost in transit and is eligible for a free reshipment or a full refund once TechNest confirms the loss with the carrier."
+SEC1 = "[SEC-1] Password resets are self-service only, through the \"Forgot password\" link, which emails a reset link valid for 60 minutes to the email on file. Support cannot reset a password directly, and can never see, read, or share a customer's password."
+SEC2 = "[SEC-2] If a customer reports signs of unauthorized access (an unrecognized order, a login alert from an unfamiliar location, a stolen password or PIN), support must immediately lock the account, force a password reset, and review recent orders for fraud, and should recommend the customer enable two-factor authentication (2FA) once back in."
+SEC3 = "[SEC-3] Support never asks a customer for their full password, full card number, or a 2FA code. Any message that asks for these is not really from TechNest and should be reported."
+SEC4 = "[SEC-4] Account deletion is not immediate: the account enters a 14-day grace period during which the customer can cancel the deletion by logging back in. After 14 days, deletion is permanent."
+SEC5 = "[SEC-5] Changing the email address on file requires the customer to click a confirmation link sent to the new email address before the change takes effect, to prevent account takeover."
+GEN1 = "[GEN-1] For this project, support (human or model) never has live access to a real order database. It cannot look up whether a specific order number has shipped, its live tracking position, or account-specific details. A reply that needs one of those facts to be correct should ask the customer, or state the answer conditionally on it - it should not guess, and it should not promise to \"check and get back to you,\" since that promise can't actually be kept under this constraint."
+
+items = [
+    dict(item_id="G29", theme="returns", challenge_type="correct_full",
+         author_note="RET-1 clean case, full compliance.",
+         customer_message="hey, i want ot return my headphones, bought them 3 weeks ago, still sealed",
+         policy_excerpt=RET1,
+         candidate_reply="Happy to help! Since it's been about 3 weeks (within our 30-day window) and the headphones are still sealed and unused in their original packaging, you're eligible for a full refund of the item price. Just send them back with all original accessories and manuals included, and we'll take it from there."),
+
+    dict(item_id="G30", theme="returns", challenge_type="correct_full",
+         author_note="RET-2, order >= $100, correct free label.",
+         customer_message="I just don't want this jacket anymore (not defective), my order was $140. Do I pay for shipping back?",
+         policy_excerpt=RET2,
+         candidate_reply="Since this isn't due to a defect, normally you'd cover return shipping yourself - but since your order total was $140 (over our $100 threshold), we'll provide a free prepaid return label instead. No cost to you for the return shipping."),
+
+    dict(item_id="G31", theme="returns", challenge_type="contradicts_policy",
+         author_note="RET-2, order is $62 (under $100), reply wrongly gives free label anyway.",
+         customer_message="Changed my mind about this speaker, order was $62. Will you send a free return label?",
+         policy_excerpt=RET2,
+         candidate_reply="Of course! We'll email you a free prepaid return label right away so you don't have to pay anything for the return shipping."),
+
+    dict(item_id="G32", theme="returns", challenge_type="correct_full",
+         author_note="RET-3 final sale exclusion, correctly refused, offers no alternative not in policy.",
+         customer_message="want to return the tablet case, i saw it was marked final sale at checkout but i still want to send it back",
+         policy_excerpt=RET3,
+         candidate_reply="I'm sorry, but items marked \"final sale\" at checkout aren't eligible for return under our policy, so we won't be able to accept this one back or issue a refund for it."),
+
+    dict(item_id="G33", theme="returns", challenge_type="contradicts_policy",
+         author_note="RET-3, opened software license, reply wrongly allows return.",
+         customer_message="I opened the license key envelope for the antivirus software but never installed it, can I return it?",
+         policy_excerpt=RET3,
+         candidate_reply="No problem, since you never actually installed it, go ahead and send it back and we'll process your refund once we receive it."),
+
+    dict(item_id="G34", theme="returns", challenge_type="sounds_thorough_no_rule",
+         author_note="RET-5, thorough-sounding steps but never states RET-5's actual shipped/not-shipped terms - the completeness trap the guide now calls out.",
+         customer_message="pls cancel order ORD-91004 im not sure if it already left the warehouse",
+         policy_excerpt=RET5,
+         candidate_reply="Absolutely, I can help with that! Here's what to do: log into your account, go to Order History, find ORD-91004, and click 'Request Cancellation.' Fill out the short form explaining your reason, and our team will process it within 24-48 hours. Let us know if you need anything else!"),
+
+    dict(item_id="G35", theme="returns", challenge_type="correct_full",
+         author_note="RET-4 refund timing, clean case.",
+         customer_message="sent my return back last week, when will i actually get my money?",
+         policy_excerpt=RET4,
+         candidate_reply="Once we receive and inspect your returned item, your refund will be issued to your original payment method within 5-7 business days. If you haven't gotten a confirmation that we received it yet, let us know your tracking number and we can look into timing further."),
+
+    dict(item_id="G36", theme="returns", challenge_type="policy_gap_correct",
+         author_note="Deliberate gap (splitting an order into two shipments) - correct reply names the gap and escalates instead of inventing a process. Kept as a *good* example for contrast with the bad gap-handling items.",
+         customer_message="can you split my order into two separate shipments, i need half of it sooner",
+         policy_excerpt="(No rule in policy_technest.md covers splitting an order into multiple shipments -- see 'Known gaps'. The correct reply says so and offers to escalate, per labelling_guide.md's 'Policy gaps' rule; do not expect or reward a specific answer here.)",
+         candidate_reply="That's a great question, but splitting an order into separate shipments isn't something our standard policy covers, so I don't want to promise a specific process I can't guarantee. Let me escalate this to our fulfillment team to see if it's possible for your specific order, and I'll follow up with you once I hear back."),
+
+    dict(item_id="G37", theme="damaged_products", challenge_type="correct_full",
+         author_note="DMG-1, reported on day 5, within window.",
+         customer_message="my keyboard arrived yesterday with 3 dead keys, delivered 5 days ago",
+         policy_excerpt=DMG1,
+         candidate_reply="I'm sorry to hear that! Since it's been 5 days since delivery, you're within our 7-day window to report this. Please attach a couple of photos of the keyboard and its packaging to your request, and once we verify the damage we'll get a replacement moving."),
+
+    dict(item_id="G38", theme="damaged_products", challenge_type="completeness_partial",
+         author_note="DMG-1, correctly within window but never mentions the photo requirement - covers the main point (window), misses a detail (evidence needed).",
+         customer_message="the monitor i got has a dead pixel in the corner, arrived 2 days ago",
+         policy_excerpt=DMG1,
+         candidate_reply="Sorry about that! You're well within our reporting window since it just arrived. Go ahead and let us know the details and we'll get a replacement started for you."),
+
+    dict(item_id="G39", theme="damaged_products", challenge_type="correct_full",
+         author_note="DMG-3, out of stock, correctly offers the refund-or-substitute choice.",
+         customer_message="you guys verified my damage report for the wireless mouse but now you're saying its out of stock??",
+         policy_excerpt=DMG3,
+         candidate_reply="Sorry for the frustration! Since that exact model is currently out of stock, you have two options: a full refund for the item, or a substitute item of equivalent value instead. Just let us know which you'd prefer and we'll take care of it right away."),
+
+    dict(item_id="G40", theme="damaged_products", challenge_type="rude_tone",
+         author_note="DMG-4, correctly redirects to manufacturer warranty (correctness should score well) but the tone is condescending/blaming - tests that politeness is graded independently of correctness.",
+         customer_message="my tablet screen cracked after i dropped it off my desk, can you replace it",
+         policy_excerpt=DMG4,
+         candidate_reply="Well, that's on you for dropping it, not us. Customer-caused damage like that isn't covered by our policy at all. You'll have to deal with the manufacturer's warranty if you even have one, we can't help with self-inflicted damage."),
+
+    dict(item_id="G41", theme="damaged_products", challenge_type="policy_gap_correct",
+         author_note="DMG-5 gap (reported day 20, more than 7 but within 30) - correct reply names the gap and doesn't invent a standard-return workaround, since the item is used and likely won't qualify anyway.",
+         customer_message="just now noticing my blender has a crack in the base, i got it 20 days ago",
+         policy_excerpt=DMG5,
+         candidate_reply="I want to be upfront with you: our policy covers damage reports within 7 days of delivery, and it's been 20 days, so this falls into a gap in our stated rules - a standard 30-day return normally requires the item to be unused, which usually wouldn't apply here since it's been in use. Rather than guess, let me escalate this to a supervisor and get back to you with a real answer."),
+
+    dict(item_id="G42", theme="damaged_products", challenge_type="contradicts_policy",
+         author_note="Same DMG-5 gap scenario as G41, but this reply confidently invents a full-replacement entitlement instead of naming the gap - the exact anti-pattern the guide's 'policy gaps' rule warns against.",
+         customer_message="just now noticing my blender has a crack in the base, i got it 20 days ago",
+         policy_excerpt=DMG5,
+         candidate_reply="No worries at all, that's still within our damage window! We'll get a free replacement shipped out to you right away, no need to send the old one back first."),
+
+    dict(item_id="G43", theme="damaged_products", challenge_type="contradicts_policy",
+         author_note="DMG-6, reply promises an exact delivery date it can't guarantee.",
+         customer_message="ok you're sending a replacement charger, exactly what day will it get here?",
+         policy_excerpt=DMG6,
+         candidate_reply="Your replacement will arrive tomorrow by 5pm, guaranteed!"),
+
+    dict(item_id="G44", theme="damaged_products", challenge_type="correct_full",
+         author_note="DMG-6, correctly declines to guarantee an exact date and gives the real 3-5 day range.",
+         customer_message="ok you're sending a replacement charger, exactly what day will it get here?",
+         policy_excerpt=DMG6,
+         candidate_reply="I can't guarantee an exact delivery date, but standard replacement shipping typically takes 3-5 business days after we verify the damage report. You'll get a tracking link by email once it ships."),
+
+    dict(item_id="G45", theme="shipping", challenge_type="correct_full",
+         author_note="SHIP-1 figures, order just under $50 threshold.",
+         customer_message="if my cart is $42 how much is shipping gonna cost",
+         policy_excerpt=SHIP1,
+         candidate_reply="Since your order is under $50, standard shipping (3-7 business days) would be a flat $6.99. If you'd rather have it faster, express shipping (1-2 business days) is $14.99 regardless of order size."),
+
+    dict(item_id="G46", theme="shipping", challenge_type="correct_full",
+         author_note="SHIP-2, correct hedge - confirms it can check but won't promise before checkout.",
+         customer_message="does technest deliver to remote areas in northern canada?",
+         policy_excerpt=SHIP2,
+         candidate_reply="We only ship to the countries and regions listed at checkout, so I can't promise delivery there without confirming first. Go ahead and enter your address at checkout - if it's not accepted, that region currently isn't supported."),
+
+    dict(item_id="G47", theme="shipping", challenge_type="correct_full",
+         author_note="SHIP-3, correctly asks status before promising an address change, phrased differently from existing G15/G18.",
+         customer_message="typo in my street address, need to fix it asap",
+         policy_excerpt=SHIP3,
+         candidate_reply="I can help, but it depends on your order's status. If it's still \"Processing,\" I can update the address for you right now. If it's already \"Shipped,\" neither of us can change it anymore and you'd need to contact the carrier directly. Which status does your order show?"),
+
+    dict(item_id="G48", theme="shipping", challenge_type="contradicts_policy",
+         author_note="SHIP-4 + GEN-1 combined violation: promises a specific day with false certainty.",
+         customer_message="will my package for sure arrive by friday?",
+         policy_excerpt=SHIP4 + " " + GEN1,
+         candidate_reply="Yes, don't worry, it'll definitely be there by Friday!"),
+
+    dict(item_id="G49", theme="shipping", challenge_type="correct_full",
+         author_note="SHIP-5, new rule, tracking stalled 12 days, correct eligibility stated.",
+         customer_message="tracking hasnt updated in almost 2 weeks, order ORD-20938, whats going on",
+         policy_excerpt=SHIP5,
+         candidate_reply="I'm sorry for the wait - since tracking has shown no movement for more than 10 business days, this qualifies as lost in transit under our policy. Once we confirm the loss with the carrier, you're eligible for either a free reshipment or a full refund. Let us know which you'd prefer."),
+
+    dict(item_id="G50", theme="shipping", challenge_type="contradicts_policy",
+         author_note="Same SHIP-5 scenario as G49, but reply denies any recourse and deflects to the carrier instead.",
+         customer_message="tracking hasnt updated in almost 2 weeks, order ORD-20938, whats going on",
+         policy_excerpt=SHIP5,
+         candidate_reply="Unfortunately once a package leaves our warehouse it's completely out of our hands. You'll need to contact the shipping carrier directly, there's nothing we're able to do on our end."),
+
+    dict(item_id="G51", theme="account_security", challenge_type="correct_full",
+         author_note="SEC-1, clean case, different phrasing from existing P17/G23.",
+         customer_message="forgot my password again lol, whats the fastest way back in",
+         policy_excerpt=SEC1,
+         candidate_reply="No worries! Use the \"Forgot password\" link on the login page - it'll email a reset link to the address on your account, valid for 60 minutes. Just a heads up, we're never able to see or reset it directly on our end, so this is the only way in."),
+
+    dict(item_id="G52", theme="account_security", challenge_type="correct_full",
+         author_note="SEC-2, correct full mandatory response (lock, reset, review, 2FA).",
+         customer_message="i got a login alert from a country ive never been to, im freaking out",
+         policy_excerpt=SEC2,
+         candidate_reply="Thanks for flagging this right away - I'm locking your account now and forcing a password reset as a precaution. I'm also going to review your recent orders for anything unfamiliar. Once you're back in, I'd strongly recommend turning on two-factor authentication (2FA) to help prevent this going forward."),
+
+    dict(item_id="G53", theme="account_security", challenge_type="completeness_partial",
+         author_note="SEC-2, only does the password-reset piece, misses account lock, fraud review, and 2FA recommendation - covers a real requirement but misses most of the mandated response.",
+         customer_message="i got a login alert from a country ive never been to, im freaking out",
+         policy_excerpt=SEC2,
+         candidate_reply="That's concerning - go ahead and reset your password using the \"Forgot password\" link to be safe."),
+
+    dict(item_id="G54", theme="account_security", challenge_type="correct_full",
+         author_note="SEC-3, new rule, customer asking if a suspicious request is legitimate.",
+         customer_message="someone claiming to be technest support texted me asking for my full card number to 'verify my account', is that really you guys?",
+         policy_excerpt=SEC3,
+         candidate_reply="That's not us - TechNest support never asks for your full card number, full password, or a 2FA code, by text or any other channel. That message is a phishing attempt. Please don't respond to it or share any information, and feel free to report it to us so we can flag the number."),
+
+    dict(item_id="G55", theme="account_security", challenge_type="contradicts_policy",
+         author_note="SEC-3 violation *by the reply itself* - a severe correctness failure, not just a missed detail.",
+         customer_message="i want to update my billing info, what do you need from me",
+         policy_excerpt=SEC3,
+         candidate_reply="Sure, just reply here with your full card number and the 2FA code sent to your phone so we can verify it's really you, then we'll update the billing info on file."),
+
+    dict(item_id="G56", theme="account_security", challenge_type="contradicts_policy",
+         author_note="SEC-4, reply falsely claims deletion is immediate and permanent.",
+         customer_message="delete my account please, for good this time",
+         policy_excerpt=SEC4,
+         candidate_reply="Done! Your account and all its data have been permanently deleted effective immediately, there's no way to undo this."),
+
+    dict(item_id="G57", theme="account_security", challenge_type="contradicts_policy",
+         author_note="SEC-5, reply changes the email without mentioning the required confirmation-link step at all.",
+         customer_message="please update my email on file to my new address, jdoe2026@example.com",
+         policy_excerpt=SEC5,
+         candidate_reply="All set, your email on file has been updated to jdoe2026@example.com right away."),
+
+    dict(item_id="G58", theme="damaged_products", challenge_type="correct_clarifying",
+         author_note="Vague message, correct reply asks for the missing facts (photos, delivery date) needed to apply DMG-1/DMG-5 rather than asserting an outcome - tests the clarifying-question allowance.",
+         customer_message="my order arrived broken, what now",
+         policy_excerpt=DMG1 + " " + DMG5,
+         candidate_reply="Sorry to hear that! To figure out the right next step, could you tell me when it was delivered and send a couple of photos of the damage and packaging? Depending on how many days it's been since delivery, the process differs, so I want to make sure I give you the right answer rather than guess."),
+]
+
+with open(OUT_PATH, "w", encoding="utf-8") as f:
+    for item in items:
+        row = {
+            "item_id": item["item_id"],
+            "batch": "golden_sample_stage2",
+            "theme": item["theme"],
+            "customer_message": item["customer_message"],
+            "policy_excerpt": item["policy_excerpt"],
+            "candidate_reply": item["candidate_reply"],
+            "challenge_type": item["challenge_type"],
+            "author_note": item["author_note"],
+        }
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+print(f"Wrote {len(items)} items to {OUT_PATH}")
