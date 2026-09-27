@@ -52,6 +52,25 @@ Every row in `pilot_items.jsonl` carries:
 7 are team-written. See `pilot_items.jsonl` / `pilot_items.csv` for the
 full per-item breakdown.
 
+## Golden set, stage 1 (`golden_sample_stage1.jsonl`, 28 items)
+
+A second, separate batch, built after the pilot for a different purpose:
+testing whether **real** Bitext `instruction` + `response` pairs (not
+team-written replies) can serve as the source for scaling to 150+. All 28
+items are Bitext-sourced; none are team-written. Every item carries
+`original_instruction` and `original_response` (the raw Bitext text) plus
+an `edits` list documenting exactly what, if anything, changed, and why —
+see `GOLDEN_SAMPLE_REVIEW.md` for the full method and evidence review.
+
+**We did not use the Twitter Customer Support dataset for either batch.**
+Two Hugging Face mirrors were checked; the one with real message/reply
+structure (`TNE-AI/customer-support-on-twitter-conversation`) contains
+real tweets from real people directed at real companies (Amazon, Apple,
+Uber support handles, etc.) — personal data from real users, and replies
+written under a real company's real policy, not gradable against our
+fictional TechNest rules. Skipped for both reasons; flagged here in case
+the team wants to revisit this decision with the instructor.
+
 ## What still needs review
 
 - A teammate other than the author should spot-check the `adapted` items

@@ -102,10 +102,34 @@ right answer is to say so, not to invent one.
 
 ## What support does NOT have access to
 
-For this project, support (human or model) never has live access to a
-real order database. It cannot look up whether a specific order number
-has shipped, its live tracking position, or account-specific details. A
-reply that needs one of those facts to be correct should ask the
-customer, or state the answer conditionally on it — it should not guess.
-This is intentional: several pilot items test whether a candidate reply
-asks for missing information instead of inventing an order status.
+- **GEN-1**: For this project, support (human or model) never has live
+  access to a real order database. It cannot look up whether a specific
+  order number has shipped, its live tracking position, or
+  account-specific details. A reply that needs one of those facts to be
+  correct should ask the customer, or state the answer conditionally on
+  it — it should not guess, and it should not promise to "check and get
+  back to you," since that promise can't actually be kept under this
+  constraint. This is intentional: several items across the pilot and
+  golden set test whether a candidate reply asks for missing information
+  instead of inventing an order status or promising a live lookup it
+  can't perform.
+
+## Known gaps (not yet covered by any rule)
+
+Sampling real customer questions for the golden set surfaced requests
+this policy does not address. These are deliberately **not** patched by
+inventing a rule from a single example — see
+`GOLDEN_SAMPLE_REVIEW.md` for the evidence review that found them. Until
+the team adds rules here, a reply to one of these should say the policy
+doesn't cover it and offer to escalate, per the "Policy gaps" guidance in
+`labelling_guide.md` — that is the *correct* behavior, not a missing
+answer.
+
+- Modifying an existing order's contents (adding/removing items) —
+  distinct from cancelling it (RET-5) or returning it after delivery
+  (RET-1).
+- Sign-up/registration problems (creating a new account, not managing an
+  existing one).
+- Generic profile-detail edits (name, phone, etc.) — SEC-5 covers only
+  the email-change case specifically.
+- Switching or upgrading an account tier/plan.

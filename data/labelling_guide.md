@@ -86,6 +86,37 @@ test, not a human label, and reading them first will bias you.
   genuinely can't be judged, mark all three scores `NA` and say why in
   the notes column rather than forcing a number.
 
+## Addendum (v0.2): rules added after reviewing real data
+
+The pilot's replies were team-written to order. `golden_sample_stage1.jsonl`
+uses real Bitext replies instead (see `GOLDEN_SAMPLE_REVIEW.md`), which
+surfaced two situations the rules above don't quite cover:
+
+- **Elaborating beyond the policy excerpt, without contradicting it.**
+  Some real replies add detail the policy doesn't mention (e.g., breaking
+  a refund timeframe down by payment method when the policy just gives
+  one number, or listing an extra eligibility reason). This is not
+  automatically "inventing a rule" (correctness 0) — only score it 0 if
+  the added detail contradicts a rule or asserts something the policy
+  rules out. If it's additional and merely unverified against our
+  specific policy (neither confirmed nor contradicted), score correctness
+  1, and say in the notes which part was unverifiable.
+- **Promising a live lookup we've said support can't do (GEN-1).** A
+  reply that asks for an order/tracking number *and* implies it will
+  check and report back ("let me look into it and get back to you") is
+  making a promise GEN-1 says can't be kept in this project. Score
+  correctness 1, not 2, for this specific issue alone (it's a real,
+  common, and fairly minor over-promise, not a policy contradiction) —
+  and note it, so we can track how often this pattern shows up as we
+  scale.
+- **Items with an empty `policy_rule_ids` list are deliberate.** These
+  are requests the policy doesn't cover at all (see "Known gaps" in
+  `policy_technest.md`) — score them the same way as any other policy
+  gap (see "Policy gaps" above): reward a reply that says the policy
+  doesn't address this and offers to escalate; do not expect or reward a
+  confident, specific answer, since there's no rule to be correct
+  *against*.
+
 ## Process for this pilot
 
 1. Two teammates each take a **blank, independent** copy of the sheet
@@ -101,3 +132,10 @@ test, not a human label, and reading them first will bias you.
    the disagreement rate itself is something we report (this pilot is too
    small to compute a meaningful Cohen's kappa; that's done on the full
    150+ set).
+
+The same process (steps 1-5) applies to `golden_sample_stage1.jsonl`,
+using `labelling_sheet_golden_sample_labeler1.csv` /
+`..._labeler2.csv` instead — it's a separate 28-item batch, not the
+pilot, and needs its own independent double-labelling before we decide
+whether this sourcing method is ready to scale to 150+ (see
+`GOLDEN_SAMPLE_REVIEW.md`, "What's next").

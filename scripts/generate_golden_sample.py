@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""Generate the Stage-1 golden-set validation batch (28 items).
+
+This is NOT the 150+ golden set. It's real Bitext instruction/response
+pairs, lightly cleaned (placeholder resolution only, documented per item),
+built to be human-labelled and checked for score-distribution sanity
+before scaling the same method to 150+. See GOLDEN_SAMPLE_REVIEW.md.
+
+Writes into <repo>/data/:
+  - golden_sample_stage1.jsonl
+  - golden_sample_stage1.csv
+  - labelling_sheet_golden_sample_labeler1.csv
+  - labelling_sheet_golden_sample_labeler2.csv
+"""
+import csv
+import json
+import os
+from collections import Counter
+
+REPO_DATA = "/home/azizbzt/Desktop/ai-projects/grader/data"
+BITEXT_SOURCE = "bitext/Bitext-customer-support-llm-chatbot-training-dataset"
+
+RULES = {
+    "RET-1": "Items may be returned within 30 calendar days of delivery for a full refund of the item price, provided the item is unused, in its original packaging, and includes all accessories and manuals.",
+    "RET-3": "Opened software licenses, digital gift cards, and items marked \"final sale\" at checkout cannot be returned.",
+    "RET-4": "Once TechNest receives and inspects a returned item, the refund is issued to the original payment method within 5-7 business days.",
+    "RET-5": "An order can be cancelled at no charge at any time before it ships. Once an order's status is \"Shipped,\" it can no longer be cancelled; the customer must wait for delivery and then request a standard return instead.",
+    "DMG-1": "Damage or defects present on arrival must be reported within 7 calendar days of delivery, with photos of the item and its packaging attached to the support request.",
+    "DMG-2": "Once a damage report is verified, TechNest ships a free replacement immediately, without requiring the damaged unit to be returned first, and includes a prepaid return label for the damaged unit.",
+    "DMG-3": "If the same model is out of stock for a replacement, the customer may choose between a full refund or a substitute item of equivalent value.",
+    "SHIP-1": "Standard shipping (3-7 business days) is free on orders of $50 or more; otherwise a flat $6.99 fee applies. Express shipping (1-2 business days) costs $14.99 regardless of order size.",
+    "SHIP-2": "TechNest currently ships only to the countries listed at checkout. Support may confirm whether a specific country is supported, but must not promise shipping to a country not listed at checkout.",
+    "SHIP-3": "A shipping address can be changed by the customer or by support only while the order status is \"Processing.\" Once the status is \"Shipped,\" neither TechNest nor the customer can change the delivery address; the customer must contact the carrier directly.",
+    "SHIP-4": "Support does not have live parcel-location data and cannot guarantee an exact delivery date. Customers should use the tracking link emailed at the time of shipment.",
+    "SEC-1": "Password resets are self-service only, through the \"Forgot password\" link, which emails a reset link valid for 60 minutes to the email on file. Support cannot reset a password directly, and can never see, read, or share a customer's password.",
+    "SEC-4": "Account deletion is not immediate: the account enters a 14-day grace period during which the customer can cancel the deletion by logging back in. After 14 days, deletion is permanent.",
+    "SEC-5": "Changing the email address on file requires the customer to click a confirmation link sent to the new email address before the change takes effect, to prevent account takeover.",
+    "GEN-1": "For this project, support (human or model) never has live access to a real order database. It cannot look up whether a specific order number has shipped, its live tracking position, or account-specific details. A reply that needs one of those facts to be correct should ask the customer, or state the answer conditionally on it - it should not guess, and it should not promise to \"check and get back to you,\" since that promise can't actually be kept under this constraint.",
+}
+
+NO_RULE_EXCERPT = (
+    "(No rule in policy_technest.md covers this request -- see 'Known gaps'. "
+    "The correct reply says so and offers to escalate, per labelling_guide.md's "
+    "'Policy gaps' rule; do not expect or reward a specific answer here.)"
+)
+
+def excerpt(*rule_ids):
+    if not rule_ids:
+        return NO_RULE_EXCERPT
+    return " ".join(f"[{rid}] {RULES[rid]}" for rid in rule_ids)
+
+ITEMS = [
+    dict(item_id="G01", theme="returns", source_id=5,
+         original_instruction="can you help me cancel order {{Order Number}}?",
+         customer_message="can you help me cancel order ORD-58213?",
+         original_response="Of course, I'm here to assist you in canceling your order with the number {{Order Number}}. Let's get this sorted out for you. \n\nPlease follow these steps:\n\n1. Sign in to your {{Online Company Portal Info}} using your credentials.\n2. Go to your '{{Online Order Interaction}}' or '{{Online Order Interaction}}' section, where you can find a record of all your purchases.\n3. Locate the order associated with the number {{Order Number}} and click on it to view the details.\n4. Look for the option to '{{Online Order Interaction}}' and select it to initiate the cancellation process.\n5. Follow any additional instructions or provide any necessary feedback as prompted by the system.\n\nShould you encounter any difficulties or have further questions, our dedicated support team is available to assist you. You can reach us during {{Customer Support Hours}} at {{Customer Support Phone Number}}, or you can connect with us using the Live Chat feature on our website at {{Website URL}}. We are committed to providing you with a satisfactory resolution and ensuring your utmost satisfaction.",
+         candidate_reply="Of course, I'm here to assist you in canceling your order with the number ORD-58213. Let's get this sorted out for you. \n\nPlease follow these steps:\n\n1. Sign in to your TechNest account portal using your credentials.\n2. Go to your 'Orders' or 'My Purchases' section, where you can find a record of all your purchases.\n3. Locate the order associated with the number ORD-58213 and click on it to view the details.\n4. Look for the option to 'Cancel Order' and select it to initiate the cancellation process.\n5. Follow any additional instructions or provide any necessary feedback as prompted by the system.\n\nShould you encounter any difficulties or have further questions, our dedicated support team is available to assist you. You can reach us during 9am-6pm, Monday-Saturday at +216-70-123-456, or you can connect with us using the Live Chat feature on our website at technestgadgets.example.com. We are committed to providing you with a satisfactory resolution and ensuring your utmost satisfaction.",
+         policy_rule_ids=["RET-5"],
+         edits=[{"type": "placeholder_resolved", "detail": "Order Number, Online Company Portal Info, Online Order Interaction (x3, resolved to two distinct synonyms since the source repeats the same token for what reads as alternative section names), Customer Support Hours/Phone/Website filled with consistent fictional TechNest values."}],
+         review_note="Real reply never mentions RET-5's shipped/not-shipped gating at all - naturally incomplete relative to policy, left as-is."),
+    dict(item_id="G02", theme="returns", source_id=4,
+         original_instruction="I cannot afford this order, cancel purchase {{Order Number}}",
+         customer_message="I cannot afford this order, cancel purchase ORD-77410",
+         original_response="I'm sensitive to the fact that you're facing financial difficulties and need to cancel your purchase with the order number {{Order Number}}. We're here to assist you with that, and I appreciate your transparency in sharing your situation with us. Let's proceed with the cancellation process:\n\n1. Access Your Account: Log in to our {{Online Company Portal Info}}.\n2. Locate Your Order History: Once you're logged in, navigate to the '{{Online Order Interaction}}' or '{{Online Order Interaction}}' section.\n3. Find the Relevant Purchase: Look for the purchase associated with the order number {{Order Number}} and click on it.\n4. Initiate the Cancellation: Within the purchase details page, you should see an option labeled '{{Online Order Interaction}}'. Please select this option.\n5. Confirm Cancellation: The system may prompt you for confirmation or ask a few questions for feedback. Please complete these steps.\n\nIf you encounter any difficulties or have further questions along the way, our team is ready to assist you. Reach out to us during {{Customer Support Hours}} at {{Customer Support Phone Number}} or via Live Chat on our {{Website URL}}. We value your satisfaction and understand that situations can change.",
+         candidate_reply="I'm sensitive to the fact that you're facing financial difficulties and need to cancel your purchase with the order number ORD-77410. We're here to assist you with that, and I appreciate your transparency in sharing your situation with us. Let's proceed with the cancellation process:\n\n1. Access Your Account: Log in to our TechNest account portal.\n2. Locate Your Order History: Once you're logged in, navigate to the 'Orders' or 'My Purchases' section.\n3. Find the Relevant Purchase: Look for the purchase associated with the order number ORD-77410 and click on it.\n4. Initiate the Cancellation: Within the purchase details page, you should see an option labeled 'Cancel Order'. Please select this option.\n5. Confirm Cancellation: The system may prompt you for confirmation or ask a few questions for feedback. Please complete these steps.\n\nIf you encounter any difficulties or have further questions along the way, our team is ready to assist you. Reach out to us during 9am-6pm, Monday-Saturday at +216-70-123-456 or via Live Chat on our technestgadgets.example.com. We value your satisfaction and understand that situations can change.",
+         policy_rule_ids=["RET-5"],
+         edits=[{"type": "placeholder_resolved", "detail": "Same placeholder set as G01, same resolution choices for consistency across items."}],
+         review_note="Financial-hardship framing; same RET-5 gap as G01 (no shipped/not-shipped check mentioned)."),
+    dict(item_id="G03", theme="returns", source_id=1000,
+         original_instruction="want help adding an item to order {{Order Number}}",
+         customer_message="want help adding an item to order ORD-40021",
+         original_response="Thank you for getting in touch to us for assistance with adding an item to your order. We understand the importance of getting your order just right. To help you with this, could you please provide us with the details of the item you would like to add? By having this information, we can ensure that your order is complete and meets your expectations. We appreciate your cooperation and look forward to assisting you further.",
+         candidate_reply="Thank you for getting in touch to us for assistance with adding an item to your order. We understand the importance of getting your order just right. To help you with this, could you please provide us with the details of the item you would like to add? By having this information, we can ensure that your order is complete and meets your expectations. We appreciate your cooperation and look forward to assisting you further.",
+         policy_rule_ids=[],
+         edits=[{"type": "placeholder_resolved", "detail": "Order Number filled in customer_message only; reply text has no placeholders and is fully unedited."}],
+         review_note="Order-content modification (adding an item) is a known policy gap - see policy_technest.md 'Known gaps'. Reply is a real, fully-unedited clarifying question."),
+    dict(item_id="G04", theme="returns", source_id=1003,
+         original_instruction="remove item from order {{Order Number}}",
+         customer_message="remove item from order ORD-63389",
+         original_response="I've decoded that you need assistance with removing an item from order number {{Order Number}}. Thank you for bringing this to our attention. To accurately address your request, could you please provide me with the specific details of the item you would like to be removed? Once I have this information, I will promptly assist you with the next steps to ensure the item is removed from your order to your satisfaction.",
+         candidate_reply="I've decoded that you need assistance with removing an item from order number ORD-63389. Thank you for bringing this to our attention. To accurately address your request, could you please provide me with the specific details of the item you would like to be removed? Once I have this information, I will promptly assist you with the next steps to ensure the item is removed from your order to your satisfaction.",
+         policy_rule_ids=[],
+         edits=[{"type": "placeholder_resolved", "detail": "Order Number filled in customer_message only; reply fully unedited."}],
+         review_note="Same policy gap as G03 (order-content modification)."),
+    dict(item_id="G05", theme="returns", source_id=6001,
+         original_instruction="help seeing under what circumstances can I request refunds",
+         customer_message="help seeing under what circumstances can I request refunds",
+         original_response="Absolutely! I completely understand your desire to know the circumstances under which you can request refunds. Allow me to shed light on the various scenarios:\n\n1. **Product/Service Defect:** If the product or service you purchased has a defect or does not match its description, you typically have the right to request a refund.\n\n2. **Cancellation within Grace Period:** Should you have a change of heart and decide to cancel your purchase within the given grace period, you are generally eligible for a refund.\n\n3. **Unauthorized Charges:** If you come across any charges on your account that you did not authorize or recognize, rest assured we will investigate and assist you in resolving the issue.\n\n4. **Event Cancellation:** If you have purchased tickets for an event that gets canceled and no rescheduled date is provided, you would usually be eligible for a refund.\n\n5. **Duplicate Charges:** Mistakes happen, and if you notice that you have been charged more than once for the same item, please let us know so that we can rectify the situation promptly.\n\n6. **Non-receipt of Goods or Services:** If you have not received the product or service within the expected timeframe, you may qualify for a refund in such cases.\n\nIt's important to note that specific vendors or service providers may have their own refund policies, which may come with additional or unique conditions. To obtain a comprehensive understanding, I recommend reviewing the terms and conditions or contacting the vendor directly.\n\nIf you have any specific orders or concerns, please provide me with the necessary details, such as the order number, and I'll be happy to assist you further. Your satisfaction is our top priority!\n\nIs there anything else I can help you with today?",
+         candidate_reply="Absolutely! I completely understand your desire to know the circumstances under which you can request refunds. Allow me to shed light on the various scenarios:\n\n1. **Product/Service Defect:** If the product or service you purchased has a defect or does not match its description, you typically have the right to request a refund.\n\n2. **Cancellation within Grace Period:** Should you have a change of heart and decide to cancel your purchase within the given grace period, you are generally eligible for a refund.\n\n3. **Unauthorized Charges:** If you come across any charges on your account that you did not authorize or recognize, rest assured we will investigate and assist you in resolving the issue.\n\n4. **Event Cancellation:** If you have purchased tickets for an event that gets canceled and no rescheduled date is provided, you would usually be eligible for a refund.\n\n5. **Duplicate Charges:** Mistakes happen, and if you notice that you have been charged more than once for the same item, please let us know so that we can rectify the situation promptly.\n\n6. **Non-receipt of Goods or Services:** If you have not received the product or service within the expected timeframe, you may qualify for a refund in such cases.\n\nIt's important to note that specific vendors or service providers may have their own refund policies, which may come with additional or unique conditions. To obtain a comprehensive understanding, I recommend reviewing the terms and conditions or contacting the vendor directly.\n\nIf you have any specific orders or concerns, please provide me with the necessary details, such as the order number, and I'll be happy to assist you further. Your satisfaction is our top priority!\n\nIs there anything else I can help you with today?",
+         policy_rule_ids=["RET-1", "RET-3"],
+         edits=[],
+         review_note="Fully unedited real pair. Lists 'Event Cancellation' as a refund ground - irrelevant to an electronics retailer, a leftover from the dataset's generic multi-vertical template; left unedited per GOLDEN_SAMPLE_REVIEW.md. Also lists 'Unauthorized Charges' and 'Duplicate Charges', which RET-1/RET-3 don't address - use the 'elaborating beyond the policy' addendum rule."),
+    dict(item_id="G06", theme="returns", source_id=6021,
+         original_instruction="I have to see how long reimbursements usually take, help me",
+         customer_message="I have to see how long reimbursements usually take, help me",
+         original_response="Of course! I understand how important it is for you to have an idea of the timeframe for reimbursements. While the exact timeline may vary depending on the specific circumstances and the payment method used, let me provide you with a general overview:\n\n1. **Credit Card Refunds:** Refunds processed through credit cards typically take 5-7 business days to reflect on your account, but it can vary depending on your credit card issuer.\n\n2. **Bank Transfers:** If the refund is made through a bank transfer, it may take 3-5 business days for the funds to appear in your account, although it can occasionally take longer depending on your bank's policies.\n\n3. **PayPal Refunds:** For refunds made through PayPal, the processing time usually ranges from 3 to 5 business days. However, you may also want to consider any additional time that PayPal may require for transferring the funds to your bank account or withdrawing them to your PayPal balance.\n\n4. **Check Refunds:** In the case of refund checks, the time it takes for you to receive the refund will depend on the postal service and delivery speed in your area. It's advisable to allow up to 10 business days for the check to reach you after it has been issued.\n\n5. **Store Credit or Gift Card Refunds:** If the refund is provided in the form of store credit or a gift card, you can typically expect to receive it instantly or within a few hours after the refund is processed.\n\nI hope this general timeline has addressed your query. However, please bear in mind that these time frames are provided as estimates and can vary depending on the specific circumstances of each refund. If you have a specific refund request or need further details regarding your reimbursement, kindly provide me with more information, such as your order number or any other relevant details, and I'll be glad to assist you further.\n\nIs there anything else I can help you with today?",
+         candidate_reply="Of course! I understand how important it is for you to have an idea of the timeframe for reimbursements. While the exact timeline may vary depending on the specific circumstances and the payment method used, let me provide you with a general overview:\n\n1. **Credit Card Refunds:** Refunds processed through credit cards typically take 5-7 business days to reflect on your account, but it can vary depending on your credit card issuer.\n\n2. **Bank Transfers:** If the refund is made through a bank transfer, it may take 3-5 business days for the funds to appear in your account, although it can occasionally take longer depending on your bank's policies.\n\n3. **PayPal Refunds:** For refunds made through PayPal, the processing time usually ranges from 3 to 5 business days. However, you may also want to consider any additional time that PayPal may require for transferring the funds to your bank account or withdrawing them to your PayPal balance.\n\n4. **Check Refunds:** In the case of refund checks, the time it takes for you to receive the refund will depend on the postal service and delivery speed in your area. It's advisable to allow up to 10 business days for the check to reach you after it has been issued.\n\n5. **Store Credit or Gift Card Refunds:** If the refund is provided in the form of store credit or a gift card, you can typically expect to receive it instantly or within a few hours after the refund is processed.\n\nI hope this general timeline has addressed your query. However, please bear in mind that these time frames are provided as estimates and can vary depending on the specific circumstances of each refund. If you have a specific refund request or need further details regarding your reimbursement, kindly provide me with more information, such as your order number or any other relevant details, and I'll be glad to assist you further.\n\nIs there anything else I can help you with today?",
+         policy_rule_ids=["RET-4"],
+         edits=[],
+         review_note="Fully unedited real pair. Credit-card figure (5-7 business days) matches RET-4; the other payment-method breakdowns (bank/PayPal 3-5 days, check up to 10 days, store credit instant) go beyond what RET-4 specifies - use the 'elaborating beyond the policy' addendum rule, not an automatic 0. This was the ONE row (of ~15 'how long' responses read) with this specific breakdown - see GOLDEN_SAMPLE_REVIEW.md on why we didn't rewrite RET-4 to match it."),
+    dict(item_id="G07", theme="returns", source_id=16005,
+         original_instruction="i paidx {{Currency Symbol}}{{Refund Amount}} for an article want help to obtain a refund",
+         customer_message="i paidx $89.99 for an article want help to obtain a refund",
+         original_response="I've observed that you have paid ${{Refund Amount}} for an article and you are seeking assistance to obtain a refund. I apologize for any inconvenience you may have experienced and I'm here to help you with this matter. To initiate the refund process, I recommend reaching out to our customer support team at {{Customer Support Phone Number}} or through the Live Chat on our website at {{Website URL}}. They will guide you through the necessary steps and provide you with the required information to ensure a smooth refund process. Rest assured, we value your satisfaction and will do our best to assist you promptly and efficiently.",
+         candidate_reply="I've observed that you have paid $89.99 for an article and you are seeking assistance to obtain a refund. I apologize for any inconvenience you may have experienced and I'm here to help you with this matter. To initiate the refund process, I recommend reaching out to our customer support team at +216-70-123-456 or through the Live Chat on our website at technestgadgets.example.com. They will guide you through the necessary steps and provide you with the required information to ensure a smooth refund process. Rest assured, we value your satisfaction and will do our best to assist you promptly and efficiently.",
+         policy_rule_ids=["RET-1", "RET-4"],
+         edits=[{"type": "placeholder_resolved", "detail": "Currency Symbol/Refund Amount filled ($89.99, consistent across message and reply), Customer Support Phone/Website filled with the same fictional TechNest values used elsewhere."}],
+         review_note="Doesn't actually state RET-1's conditions or RET-4's timeframe - just redirects to another channel; naturally incomplete."),
+    dict(item_id="G08", theme="returns", source_id=16003,
+         original_instruction="can you help me ask for a rebate of money?",
+         customer_message="can you help me ask for a rebate of money?",
+         original_response="Of course, I'm here to assist you in requesting a rebate for your money. I understand the importance of recovering your funds and I'll do my best to guide you through the process. Could you please provide me with some specific details about your situation? This will help me tailor my advice to your unique circumstances and ensure a successful outcome. Remember, I'm here to support you every step of the way and help you navigate this process smoothly.",
+         candidate_reply="Of course, I'm here to assist you in requesting a rebate for your money. I understand the importance of recovering your funds and I'll do my best to guide you through the process. Could you please provide me with some specific details about your situation? This will help me tailor my advice to your unique circumstances and ensure a successful outcome. Remember, I'm here to support you every step of the way and help you navigate this process smoothly.",
+         policy_rule_ids=["RET-1"],
+         edits=[],
+         review_note="Fully unedited real pair - a generic clarifying-question reply with no policy content at all."),
+    dict(item_id="G09", theme="returns", source_id=26001,
+         original_instruction="i expect a rebate of {{Currency Symbol}}{{Refund Amount}}",
+         customer_message="i expect a rebate of $42.50",
+         original_response="We understand how important it is for you to receive a rebate of {{Currency Symbol}}{{Refund Amount}}. Rest assured, we are here to provide the assistance you need in tracking the status of your rebate. Let me quickly check the progress and get back to you with the latest updates. While you wait, I'd like to ask if you've ever had any difficulties tracking a rebate in the past? Your feedback is valuable, and we appreciate your patience as we work towards ensuring your satisfaction.",
+         candidate_reply="We understand how important it is for you to receive a rebate of $42.50. Rest assured, we are here to provide the assistance you need in tracking the status of your rebate. Let me quickly check the progress and get back to you with the latest updates. While you wait, I'd like to ask if you've ever had any difficulties tracking a rebate in the past? Your feedback is valuable, and we appreciate your patience as we work towards ensuring your satisfaction.",
+         policy_rule_ids=["RET-4", "GEN-1"],
+         edits=[{"type": "placeholder_resolved", "detail": "Currency Symbol/Refund Amount filled ($42.50, consistent across message and reply)."}],
+         review_note="'Let me quickly check the progress and get back to you' is exactly the GEN-1 over-promise the addendum in labelling_guide.md covers - kept unedited on purpose."),
+    dict(item_id="G10", theme="returns", source_id=26003,
+         original_instruction="I need to track the compensation, how can I do it?",
+         customer_message="I need to track the compensation, how can I do it?",
+         original_response="I'm glad you contacted us to us regarding tracking the compensation. We understand the importance of accessing this information and will assist you in the best possible way. To track the status of your compensation, please provide us with the following details: your full name, email address, and the reference number related to your compensation claim. Once we have these details, our team will verify the information and provide you with the latest updates on your compensation. We appreciate your cooperation and look forward to resolving your query swiftly.",
+         candidate_reply="I'm glad you contacted us to us regarding tracking the compensation. We understand the importance of accessing this information and will assist you in the best possible way. To track the status of your compensation, please provide us with the following details: your full name, email address, and the reference number related to your compensation claim. Once we have these details, our team will verify the information and provide you with the latest updates on your compensation. We appreciate your cooperation and look forward to resolving your query swiftly.",
+         policy_rule_ids=["RET-4", "GEN-1"],
+         edits=[],
+         review_note="Fully unedited real pair. Same GEN-1 over-promise pattern as G09 ('verify the information and provide you with the latest updates')."),
+
+    dict(item_id="G11", theme="shipping", source_id=12000,
+         original_instruction="do ya deoiver to {{Delivery City}}",
+         customer_message="do ya deoiver to Sfax",
+         original_response="I'll do my best! We do offer delivery to {{Delivery City}}. In fact, we have a wide range of shipping options available for you to choose from. Whether you prefer standard shipping, expedited shipping, or even in-store pickup, we have you covered. Each option is designed to meet your specific needs and ensure a smooth and reliable delivery experience. So rest assured, we'll be able to deliver your items to {{Delivery City}} without any issues. If you have any more questions or need further assistance, feel free to ask. Happy shipping to {{Delivery City}}!",
+         candidate_reply="I'll do my best! We do offer delivery to Sfax. In fact, we have a wide range of shipping options available for you to choose from. Whether you prefer standard shipping, expedited shipping, or even in-store pickup, we have you covered. Each option is designed to meet your specific needs and ensure a smooth and reliable delivery experience. So rest assured, we'll be able to deliver your items to Sfax without any issues. If you have any more questions or need further assistance, feel free to ask. Happy shipping to Sfax!",
+         policy_rule_ids=["SHIP-2"],
+         edits=[{"type": "placeholder_resolved", "detail": "Delivery City filled with 'Sfax' (x4 total across message and reply); original typo 'deoiver' kept."}],
+         review_note="Confidently confirms delivery to a city without any caveat about checking the checkout list first - SHIP-2 requires that caveat; a real, naturally-occurring overpromise, left unedited."),
+    dict(item_id="G12", theme="shipping", source_id=12001,
+         original_instruction="I have to check the options for shipping, how could I do it?",
+         customer_message="I have to check the options for shipping, how could I do it?",
+         original_response="Certainly! I'm here to assist you in exploring the shipping options available to you. To check the available options, you can visit our website and navigate to the \"Shipping\" or \"Delivery\" section. Here, you'll find detailed information about our various shipping methods, including standard shipping, expedited shipping, overnight shipping, and in-store pickup.\n\nIf you prefer a more personalized experience or have specific questions about the shipping options, I recommend reaching out to our customer support team. They are available {{Customer Support Hours}} at {{Customer Support Phone Number}} or through the Live Chat on our website at {{Website URL}}. Our knowledgeable representatives will be happy to walk you through the available shipping options and help you choose the one that best suits your needs.\n\nRemember, our goal is to ensure your satisfaction and provide a seamless shipping experience. Don't hesitate to reach out if you need any further assistance or have any other questions. We're here to help!",
+         candidate_reply="Certainly! I'm here to assist you in exploring the shipping options available to you. To check the available options, you can visit our website and navigate to the \"Shipping\" or \"Delivery\" section. Here, you'll find detailed information about our various shipping methods, including standard shipping, expedited shipping, overnight shipping, and in-store pickup.\n\nIf you prefer a more personalized experience or have specific questions about the shipping options, I recommend reaching out to our customer support team. They are available 9am-6pm, Monday-Saturday at +216-70-123-456 or through the Live Chat on our website at technestgadgets.example.com. Our knowledgeable representatives will be happy to walk you through the available shipping options and help you choose the one that best suits your needs.\n\nRemember, our goal is to ensure your satisfaction and provide a seamless shipping experience. Don't hesitate to reach out if you need any further assistance or have any other questions. We're here to help!",
+         policy_rule_ids=["SHIP-1"],
+         edits=[{"type": "placeholder_resolved", "detail": "Customer Support Hours/Phone/Website filled with consistent fictional TechNest values."}],
+         review_note="Never actually states SHIP-1's cost/timeframe numbers - redirects to the website/support instead; naturally incomplete. Also mentions 'overnight shipping' and 'in-store pickup', which SHIP-1 doesn't offer - use the 'elaborating beyond the policy' addendum rule."),
+    dict(item_id="G13", theme="shipping", source_id=13000,
+         original_instruction="need to check how soon can i expect my product",
+         customer_message="need to check how soon can i expect my product",
+         original_response="For sure! I completely understand your need to have a clear idea of when your product will arrive. To provide you with accurate information, could you please provide me with the {{Tracking Number}} or {{Order Number}}? With that information, I'll be able to give you an estimate of the expected delivery date. Your patience is highly appreciated!",
+         candidate_reply="For sure! I completely understand your need to have a clear idea of when your product will arrive. To provide you with accurate information, could you please provide me with your tracking number or order number? With that information, I'll be able to give you an estimate of the expected delivery date. Your patience is highly appreciated!",
+         policy_rule_ids=["SHIP-4", "GEN-1"],
+         edits=[{"type": "placeholder_resolved", "detail": "'{{Tracking Number}} or {{Order Number}}' (a request for info, not a value to fill) resolved to lowercase generic phrasing 'your tracking number or order number'."}],
+         review_note="Promises 'I'll be able to give you an estimate' after getting the order number - conflicts with GEN-1 (no live lookup) and SHIP-4 (can't guarantee exact date); kept unedited on purpose, see labelling_guide.md addendum."),
+    dict(item_id="G14", theme="shipping", source_id=13001,
+         original_instruction="how do I see when my item is going to arrive?",
+         customer_message="how do I see when my item is going to arrive?",
+         original_response="We understand your curiosity about the arrival of your item. To check the estimated delivery date, you can visit our website and go to the \"Order Tracking\" or \"Track Your Order\" section. There, you'll be prompted to enter either your tracking number or order number, which you should have received via email or SMS. Once you enter the required information, the system will display the most up-to-date information on the status and estimated arrival time of your item. If you're unable to find this information or encounter any issues, our customer support team will be more than happy to assist you. Please reach out to them through the Live Chat on our website or at {{Customer Support Phone Number}}. Rest assured, we're here to help you throughout the delivery process!",
+         candidate_reply="We understand your curiosity about the arrival of your item. To check the estimated delivery date, you can visit our website and go to the \"Order Tracking\" or \"Track Your Order\" section. There, you'll be prompted to enter either your tracking number or order number, which you should have received via email or SMS. Once you enter the required information, the system will display the most up-to-date information on the status and estimated arrival time of your item. If you're unable to find this information or encounter any issues, our customer support team will be more than happy to assist you. Please reach out to them through the Live Chat on our website or at +216-70-123-456. Rest assured, we're here to help you throughout the delivery process!",
+         policy_rule_ids=["SHIP-4"],
+         edits=[{"type": "placeholder_resolved", "detail": "Customer Support Phone Number filled."}],
+         review_note="Points to a self-service tracking page rather than promising a direct live lookup itself - closer to SHIP-4-compliant than G13's framing, though it does imply the website's own system has live tracking; a milder version of the same tension."),
+    dict(item_id="G15", theme="shipping", source_id=2000,
+         original_instruction="can you help me correct my delivery address?",
+         customer_message="can you help me correct my delivery address?",
+         original_response="Sure! I'm here to assist you with correcting your delivery address. Please provide me with the necessary details, such as your current address and the correct address you would like to change it to, and I'll guide you through the process.",
+         candidate_reply="Sure! I'm here to assist you with correcting your delivery address. Please provide me with the necessary details, such as your current address and the correct address you would like to change it to, and I'll guide you through the process.",
+         policy_rule_ids=["SHIP-3"],
+         edits=[],
+         review_note="Fully unedited real pair. Never mentions the Processing-vs-Shipped gating that SHIP-3 requires - naturally incomplete, offers to update the address unconditionally."),
+    dict(item_id="G16", theme="shipping", source_id=2003,
+         original_instruction="where do I correct my address?",
+         customer_message="where do I correct my address?",
+         original_response="To update your shipping address, you can go to the \"Account Settings\" section on our website. From there, you will find an option to edit your shipping address. Let me know if you need any further assistance with this.",
+         candidate_reply="To update your shipping address, you can go to the \"Account Settings\" section on our website. From there, you will find an option to edit your shipping address. Let me know if you need any further assistance with this.",
+         policy_rule_ids=["SHIP-3"],
+         edits=[],
+         review_note="Fully unedited real pair. Same SHIP-3 gating omission as G15, different phrasing (self-service navigation instead of asking for details)."),
+    dict(item_id="G17", theme="shipping", source_id=23000,
+         original_instruction="there are problems submitting my new shipping address",
+         customer_message="there are problems submitting my new shipping address",
+         original_response="I'm sorry to hear that you're encountering difficulties when trying to submit your new shipping address. I completely understand the frustration and the need for a resolution. To better assist you, could you please provide some additional information about the specific problems you're facing? Are you receiving any error messages? Is the website not accepting your address? By understanding the details, I'll be able to offer you tailored guidance and support to ensure your new shipping address is successfully submitted.",
+         candidate_reply="I'm sorry to hear that you're encountering difficulties when trying to submit your new shipping address. I completely understand the frustration and the need for a resolution. To better assist you, could you please provide some additional information about the specific problems you're facing? Are you receiving any error messages? Is the website not accepting your address? By understanding the details, I'll be able to offer you tailored guidance and support to ensure your new shipping address is successfully submitted.",
+         policy_rule_ids=["SHIP-3"],
+         edits=[],
+         review_note="Fully unedited real pair - a reasonable clarifying-question reply to a technical (not policy) problem. This intent (adding an address to the account) may not be the same real-world action as changing an in-flight order's address; mapping to SHIP-3 is our best approximation, flagged for the team."),
+    dict(item_id="G18", theme="shipping", source_id=23004,
+         original_instruction="I want to enter a new shipping address, can you help me?",
+         customer_message="I want to enter a new shipping address, can you help me?",
+         original_response="For sure! I completely understand your desire to enter a new shipping address. To help you with that, let's go step by step:\n\n1. Log in to your account on our website.\n2. Navigate to the 'My Account' or 'Profile' section.\n3. Look for the 'Shipping Addresses' or similar option.\n4. There should be an option to 'Add a New Address' or 'Edit Shipping Addresses'. Click on it.\n5. Fill in the necessary details of your new shipping address in the provided fields.\n6. Double-check the information you entered to ensure accuracy.\n7. Finally, save the changes.\n\nIf you encounter any difficulties during this process or have any further questions, please don't hesitate to let me know. I'm here to guide you every step of the way!",
+         candidate_reply="For sure! I completely understand your desire to enter a new shipping address. To help you with that, let's go step by step:\n\n1. Log in to your account on our website.\n2. Navigate to the 'My Account' or 'Profile' section.\n3. Look for the 'Shipping Addresses' or similar option.\n4. There should be an option to 'Add a New Address' or 'Edit Shipping Addresses'. Click on it.\n5. Fill in the necessary details of your new shipping address in the provided fields.\n6. Double-check the information you entered to ensure accuracy.\n7. Finally, save the changes.\n\nIf you encounter any difficulties during this process or have any further questions, please don't hesitate to let me know. I'm here to guide you every step of the way!",
+         policy_rule_ids=["SHIP-3"],
+         edits=[],
+         review_note="Fully unedited real pair. Same set_up_shipping_address vs. SHIP-3 mapping caveat as G17."),
+
+    dict(item_id="G19", theme="damaged_products", source_id=7000,
+         original_instruction="I'm dissatisfied with ur work help me making a complaint",
+         customer_message="I'm dissatisfied with ur work help me making a complaint - the router I ordered stopped connecting to WiFi after two days.",
+         original_response="I'm truly sorry to hear that you're dissatisfied with our work. Your feedback is essential to us as we continuously strive to improve our services and meet your expectations. We value your concerns and would like to address them promptly and effectively. Could you please provide me with more details about your complaint? This will help us thoroughly investigate the matter and provide you with a satisfactory resolution.",
+         candidate_reply="I'm truly sorry to hear that you're dissatisfied with our work. Your feedback is essential to us as we continuously strive to improve our services and meet your expectations. We value your concerns and would like to address them promptly and effectively. Could you please provide me with more details about your complaint? This will help us thoroughly investigate the matter and provide you with a satisfactory resolution.",
+         policy_rule_ids=["DMG-1", "DMG-2"],
+         edits=[{"type": "message_augmented_with_damage_detail", "detail": "Bitext's complaint intent is generic with no product/damage specifics; added the router/WiFi detail so the item is gradable against DMG-1/DMG-2. Reply text is fully unedited."}],
+         review_note="Real reply asks for more detail rather than citing the 7-day window or free-replacement process - naturally incomplete against DMG-1/DMG-2."),
+    dict(item_id="G20", theme="damaged_products", source_id=7001,
+         original_instruction="help me to file a consumer reclamation against your company",
+         customer_message="help me to file a consumer reclamation against your company - I bought a smartwatch three days ago and the screen has a crack I didn't cause.",
+         original_response="I'm sorry to hear that you had a negative experience with our company, and I understand your need to file a consumer reclamation. Your feedback is of utmost importance to us, as it allows us to address any issues and improve our services. To begin the process, I recommend reaching out to our customer support team. They will assist you in filing a consumer reclamation, gathering all the necessary information, and guiding you through the resolution process. Rest assured, we are committed to resolving any concerns you may have.",
+         candidate_reply="I'm sorry to hear that you had a negative experience with our company, and I understand your need to file a consumer reclamation. Your feedback is of utmost importance to us, as it allows us to address any issues and improve our services. To begin the process, I recommend reaching out to our customer support team. They will assist you in filing a consumer reclamation, gathering all the necessary information, and guiding you through the resolution process. Rest assured, we are committed to resolving any concerns you may have.",
+         policy_rule_ids=["DMG-1", "DMG-2"],
+         edits=[{"type": "message_augmented_with_damage_detail", "detail": "Added the smartwatch/crack detail (within DMG-1's 7-day window). Reply text is fully unedited."}],
+         review_note="Real reply just redirects to 'our customer support team' rather than being that team - circular and vague; naturally incomplete."),
+    dict(item_id="G21", theme="damaged_products", source_id=7003,
+         original_instruction="where to lodge a customer complaint",
+         customer_message="where to lodge a customer complaint - my new tablet arrived with a shattered screen inside a dented box.",
+         original_response="I'm sorry to hear that you're looking to lodge a customer complaint. We take complaints seriously and would like to address your concerns promptly. To lodge a customer complaint, please visit our website and navigate to the \"Contact Us\" or \"Support\" section. Alternatively, you can reach out to our customer support team through email, phone, or live chat. Our dedicated team will guide you through the complaint process and ensure that your concerns are properly addressed. We appreciate your feedback and the opportunity to improve our services.",
+         candidate_reply="I'm sorry to hear that you're looking to lodge a customer complaint. We take complaints seriously and would like to address your concerns promptly. To lodge a customer complaint, please visit our website and navigate to the \"Contact Us\" or \"Support\" section. Alternatively, you can reach out to our customer support team through email, phone, or live chat. Our dedicated team will guide you through the complaint process and ensure that your concerns are properly addressed. We appreciate your feedback and the opportunity to improve our services.",
+         policy_rule_ids=["DMG-1", "DMG-2", "DMG-3"],
+         edits=[{"type": "message_augmented_with_damage_detail", "detail": "Added the tablet/shattered-screen/dented-box detail (clear arrival damage, within DMG-1's window). Reply text is fully unedited."}],
+         review_note="Real reply doesn't engage with the damage at all - purely a generic 'where to complain' navigation answer; the biggest correctness/completeness gap in this theme, left unedited on purpose."),
+    dict(item_id="G22", theme="damaged_products", source_id=7004,
+         original_instruction="can uhelp me lodge a claim against ur business",
+         customer_message="can uhelp me lodge a claim against ur business - the headphones I received are missing the charging cable that's supposed to come in the box.",
+         original_response="I'm not mistaken your need to lodge a claim against our business, and I'm here to assist you with that process. Your satisfaction is our priority, and we take all customer concerns seriously. Could you please provide me with the details of your claim, including any supporting documentation or evidence? This will help us thoroughly review your case and work towards a resolution.",
+         candidate_reply="I'm not mistaken your need to lodge a claim against our business, and I'm here to assist you with that process. Your satisfaction is our priority, and we take all customer concerns seriously. Could you please provide me with the details of your claim, including any supporting documentation or evidence? This will help us thoroughly review your case and work towards a resolution.",
+         policy_rule_ids=["DMG-1", "DMG-2", "DMG-3"],
+         edits=[{"type": "message_augmented_with_damage_detail", "detail": "Added the headphones/missing-cable detail (an incomplete-shipment case, arguably closer to DMG-1 than a defect). Reply text is fully unedited."}],
+         review_note="Missing accessory is an edge case: is it 'damaged/defective' under DMG-1, or something the policy doesn't clearly name? Worth a labeller note either way; reply itself is a generic request for more detail."),
+
+    dict(item_id="G23", theme="account_security", source_id=20003,
+         original_instruction="can you give me information about a password retrieval?",
+         customer_message="can you give me information about a password retrieval?",
+         original_response="For sure! I'm here to provide you with all the necessary information about password retrieval. Understanding the process and having all the facts is essential. \n\nWhen it comes to password retrieval, the most common method is through the \"Forgot Password\" functionality on our platform. This feature allows you to reset your password quickly and easily. Here's what you need to do:\n\n1. Start by visiting the \"{{Login Page URL}}\" of our platform.\n2. Look for the \"{{Forgot Password}}\" option, usually located below the login fields.\n3. Click on it, and you'll be directed to a password recovery page.\n4. On the password recovery page, you'll be prompted to enter the email address associated with your profile.\n5. After entering your email, click on the \"Submit\" or \"Reset Password\" button.\n6. An email containing instructions to reset your password will be sent to the provided email address. Ensure you check your spam or junk folders if you can't find it in your primary inbox.\n7. Follow the instructions in the email carefully to create a new password for your profile.\n\nRemember, if you encounter any issues during the password retrieval process, don't hesitate to reach out to our customer support team. They are available {{Customer Support Hours}} at {{Customer Support Phone Number}} or through the Live Chat on our website at {{Website URL}}. They will be more than happy to assist you further.\n\nI hope this information clarifies the password retrieval process for you. Should you have any additional questions or concerns, please feel free to ask.",
+         candidate_reply="For sure! I'm here to provide you with all the necessary information about password retrieval. Understanding the process and having all the facts is essential. \n\nWhen it comes to password retrieval, the most common method is through the \"Forgot Password\" functionality on our platform. This feature allows you to reset your password quickly and easily. Here's what you need to do:\n\n1. Start by visiting the TechNest login page.\n2. Look for the \"Forgot password\" option, usually located below the login fields.\n3. Click on it, and you'll be directed to a password recovery page.\n4. On the password recovery page, you'll be prompted to enter the email address associated with your profile.\n5. After entering your email, click on the \"Submit\" or \"Reset Password\" button.\n6. An email containing instructions to reset your password will be sent to the provided email address. Ensure you check your spam or junk folders if you can't find it in your primary inbox.\n7. Follow the instructions in the email carefully to create a new password for your profile.\n\nRemember, if you encounter any issues during the password retrieval process, don't hesitate to reach out to our customer support team. They are available 9am-6pm, Monday-Saturday at +216-70-123-456 or through the Live Chat on our website at technestgadgets.example.com. They will be more than happy to assist you further.\n\nI hope this information clarifies the password retrieval process for you. Should you have any additional questions or concerns, please feel free to ask.",
+         policy_rule_ids=["SEC-1"],
+         edits=[{"type": "placeholder_resolved", "detail": "Login Page URL, Forgot Password, Customer Support Hours/Phone/Website filled with consistent fictional TechNest values."}],
+         review_note="Matches SEC-1's self-service flow closely, but never states the 60-minute link expiry - naturally incomplete on that one detail, everything else aligned."),
+    dict(item_id="G24", theme="account_security", source_id=21000,
+         original_instruction="i cant open an accojnt help me to notify of a sign-up issue",
+         customer_message="i cant open an accojnt help me to notify of a sign-up issue",
+         original_response="I'm glad you contacted us to us and expressing your difficulty in opening an account. We understand the frustration that arises from encountering sign-up issues. Rest assured, we are here to help you navigate through this process smoothly. To notify us of the sign-up issue you're facing, please provide us with more details regarding the problem. This will enable us to assist you promptly and find the best possible solution. We appreciate your patience, and we are committed to resolving the issue you're facing as quickly as possible.",
+         candidate_reply="I'm glad you contacted us to us and expressing your difficulty in opening an account. We understand the frustration that arises from encountering sign-up issues. Rest assured, we are here to help you navigate through this process smoothly. To notify us of the sign-up issue you're facing, please provide us with more details regarding the problem. This will enable us to assist you promptly and find the best possible solution. We appreciate your patience, and we are committed to resolving the issue you're facing as quickly as possible.",
+         policy_rule_ids=[],
+         edits=[],
+         review_note="Fully unedited real pair (original typo 'accojnt' kept). Registration/sign-up problems are a known policy gap - see policy_technest.md 'Known gaps'. Reply is a generic clarifying question with no policy content to be right or wrong about."),
+    dict(item_id="G25", theme="account_security", source_id=11001,
+         original_instruction="what do I have to do to cancel my {{Account Category}} acdcount?",
+         customer_message="what do I have to do to cancel my Premium acdcount?",
+         original_response="Appreciate you reaching out to us regarding the cancellation of your {{Account Category}} account. I understand that you wish to terminate your subscription and I'm here to assist you with the process. To cancel your {{Account Category}} account, please follow these steps: \n\n1. Login to your account on our website or app.\n2. Navigate to your account settings or profile.\n3. Look for the option to manage your subscription or membership.\n4. Select the option to cancel your {{Account Category}} account.\n5. You may be asked to provide a reason for canceling, so please try to provide us with any feedback or suggestions you may have.\n6. Follow the prompts to confirm the cancellation.\n\nOnce you've completed these steps, your {{Account Category}} account will be successfully canceled. Please note that any remaining subscription period may still be active until the end of the billing cycle. If you have any further questions or encounter any issues during the cancellation process, our customer support team is here to assist you. Don't hesitate to reach out to us for any clarification or additional support. We appreciate your understanding and value your time with us.",
+         candidate_reply="Appreciate you reaching out to us regarding the cancellation of your Premium account. I understand that you wish to terminate your subscription and I'm here to assist you with the process. To cancel your Premium account, please follow these steps: \n\n1. Login to your account on our website or app.\n2. Navigate to your account settings or profile.\n3. Look for the option to manage your subscription or membership.\n4. Select the option to cancel your Premium account.\n5. You may be asked to provide a reason for canceling, so please try to provide us with any feedback or suggestions you may have.\n6. Follow the prompts to confirm the cancellation.\n\nOnce you've completed these steps, your Premium account will be successfully canceled. Please note that any remaining subscription period may still be active until the end of the billing cycle. If you have any further questions or encounter any issues during the cancellation process, our customer support team is here to assist you. Don't hesitate to reach out to us for any clarification or additional support. We appreciate your understanding and value your time with us.",
+         policy_rule_ids=["SEC-4"],
+         edits=[{"type": "placeholder_resolved", "detail": "Account Category filled with 'Premium' (x4 total); original typo 'acdcount' kept."}],
+         review_note="Never mentions SEC-4's 14-day grace period or that deletion can be reversed by logging back in - a real, naturally-occurring completeness gap on the single most important fact for this request."),
+    dict(item_id="G26", theme="account_security", source_id=14000,
+         original_instruction="change details on standard account",
+         customer_message="change details on standard account",
+         original_response="It's absolutely inspiring to witness your dedication to personalizing and updating the details on your standard account. We understand that your account information is essential to you, and we're here to guide and empower you through this process. To make the necessary changes, you can log into our secure {{Online Company Portal Info}} and navigate to the account settings section. Our user-friendly interface will assist you in updating your personal and account details effortlessly. If you encounter any difficulties along the way, our friendly customer support team is just a phone call or chat away, ready to provide the assistance you need. Together, we'll ensure that your standard account reflects the most accurate and up-to-date information.",
+         candidate_reply="It's absolutely inspiring to witness your dedication to personalizing and updating the details on your standard account. We understand that your account information is essential to you, and we're here to guide and empower you through this process. To make the necessary changes, you can log into our secure TechNest account portal and navigate to the account settings section. Our user-friendly interface will assist you in updating your personal and account details effortlessly. If you encounter any difficulties along the way, our friendly customer support team is just a phone call or chat away, ready to provide the assistance you need. Together, we'll ensure that your standard account reflects the most accurate and up-to-date information.",
+         policy_rule_ids=["SEC-5"],
+         edits=[{"type": "placeholder_resolved", "detail": "Online Company Portal Info filled."}],
+         review_note="Message is about generic account details, not specifically email - SEC-5 only explicitly covers email changes, so this is a partial/approximate mapping (see policy_technest.md 'Known gaps'). Also worth team discussion: the tone ('absolutely inspiring', 'empower you') is oddly effusive for a routine request - left unedited, see GOLDEN_SAMPLE_REVIEW.md."),
+    dict(item_id="G27", theme="account_security", source_id=24000,
+         original_instruction="I want to change to the gold account, help me",
+         customer_message="I want to change to the gold account, help me",
+         original_response="I'll do my best! I'm thrilled to assist you with upgrading to the {{Account Type}} account:\n\n1. Log In: Start by logging into our platform using your credentials.\n2. Navigate to Account Settings: Once logged in, locate the '{{Settings}}' or '{{Profile}}' section of your account.\n3. Upgrade Option: Within this section, you will find an option labeled '{{Upgrade Account}}' or '{{Account Change}}'.\n4. Select {{Account Type}} Account: Choose the '{{Account Type}}' option from the available choices.\n5. Finalize the Switch: Follow the on-screen prompts and instructions to complete the switch to the {{Account Type}} account.\n\nFeel free to reach out if you encounter any challenges or have further questions. Your decision to upgrade is highly appreciated, and I'm here to ensure a seamless and enjoyable experience with the {{Account Type}} account. Enjoy the exclusive benefits that come with it!",
+         candidate_reply="I'll do my best! I'm thrilled to assist you with upgrading to the Gold account:\n\n1. Log In: Start by logging into our platform using your credentials.\n2. Navigate to Account Settings: Once logged in, locate the 'Account Settings' or 'Profile' section of your account.\n3. Upgrade Option: Within this section, you will find an option labeled 'Upgrade Plan' or 'Change Plan'.\n4. Select Gold Account: Choose the 'Gold' option from the available choices.\n5. Finalize the Switch: Follow the on-screen prompts and instructions to complete the switch to the Gold account.\n\nFeel free to reach out if you encounter any challenges or have further questions. Your decision to upgrade is highly appreciated, and I'm here to ensure a seamless and enjoyable experience with the Gold account. Enjoy the exclusive benefits that come with it!",
+         policy_rule_ids=[],
+         edits=[{"type": "placeholder_resolved", "detail": "Account Type filled with 'Gold' (x5, matching the customer's own wording); Settings/Profile/Upgrade Account/Account Change resolved to plausible distinct UI-element names."}],
+         review_note="Account tier switching/upgrades are a known policy gap - see policy_technest.md 'Known gaps'. Confident, detailed, step-by-step answer to a request the policy doesn't actually address at all - a good test of whether a labeller/judge notices confidence isn't the same as being grounded in policy."),
+    dict(item_id="G28", theme="account_security", source_id=10000,
+         original_instruction="open a {{Account Type}} account",
+         customer_message="open a Standard account",
+         original_response="I'm thrilled to assist you in opening a {{Account Type}} account. It's a great choice! To get started, I would need a few details from you. Could you please provide the full name, email address, and a preferred username for the account? Once we have these details, I'll guide you step-by-step through the process, making sure you're well-informed at every stage. You can trust that your privacy and security are of the utmost importance to us, and we'll handle your information with the highest level of care.",
+         candidate_reply="I'm thrilled to assist you in opening a Standard account. It's a great choice! To get started, I would need a few details from you. Could you please provide the full name, email address, and a preferred username for the account? Once we have these details, I'll guide you step-by-step through the process, making sure you're well-informed at every stage. You can trust that your privacy and security are of the utmost importance to us, and we'll handle your information with the highest level of care.",
+         policy_rule_ids=[],
+         edits=[{"type": "placeholder_resolved", "detail": "Account Type filled with 'Standard' (x2)."}],
+         review_note="Account creation/sign-up itself is a known policy gap - see policy_technest.md 'Known gaps'."),
+]
+
+REQUIRED_FIELDS = [
+    "item_id", "theme", "customer_message", "original_instruction",
+    "policy_rule_ids", "candidate_reply", "original_response", "source_id",
+    "edits", "review_note",
+]
+
+def validate(items):
+    errors = []
+    ids = [it["item_id"] for it in items]
+    if len(ids) != len(set(ids)):
+        errors.append("Duplicate item_id found")
+    for it in items:
+        for f in REQUIRED_FIELDS:
+            if f not in it:
+                errors.append(f"{it.get('item_id','?')}: missing field {f}")
+        for rid in it["policy_rule_ids"]:
+            if rid not in RULES:
+                errors.append(f"{it['item_id']}: unknown policy rule id {rid}")
+        if not it["customer_message"].strip():
+            errors.append(f"{it['item_id']}: empty customer_message")
+        if not it["candidate_reply"].strip():
+            errors.append(f"{it['item_id']}: empty candidate_reply")
+        # placeholder leftover check - nothing should still contain {{
+        if "{{" in it["customer_message"] or "{{" in it["candidate_reply"]:
+            errors.append(f"{it['item_id']}: unresolved {{{{placeholder}}}} left in final text")
+    return errors
+
+def main():
+    errors = validate(ITEMS)
+    if errors:
+        print("VALIDATION FAILED:")
+        for e in errors:
+            print(" -", e)
+        raise SystemExit(1)
+
+    os.makedirs(REPO_DATA, exist_ok=True)
+
+    for it in ITEMS:
+        it["source"] = "bitext"
+        it["scenario_id"] = it["item_id"]
+        it["policy_excerpt"] = excerpt(*it["policy_rule_ids"])
+        it["reply_unchanged"] = (it["candidate_reply"] == it["original_response"])
+        it["message_unchanged"] = (it["customer_message"] == it["original_instruction"])
+        it["adapted"] = not (it["reply_unchanged"] and it["message_unchanged"])
+        it["policy_source_dataset"] = BITEXT_SOURCE
+
+    jsonl_path = os.path.join(REPO_DATA, "golden_sample_stage1.jsonl")
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for it in ITEMS:
+            f.write(json.dumps(it, ensure_ascii=False) + "\n")
+
+    csv_path = os.path.join(REPO_DATA, "golden_sample_stage1.csv")
+    fieldnames = ["item_id", "scenario_id", "theme", "customer_message", "policy_rule_ids",
+                  "policy_excerpt", "candidate_reply", "source", "source_id",
+                  "adapted", "reply_unchanged", "message_unchanged", "review_note",
+                  "edits", "original_instruction", "original_response", "policy_source_dataset"]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for it in ITEMS:
+            row = dict(it)
+            row["policy_rule_ids"] = ";".join(it["policy_rule_ids"])
+            row["edits"] = json.dumps(it["edits"], ensure_ascii=False)
+            w.writerow(row)
+
+    for labeller in ("labeler1", "labeler2"):
+        path = os.path.join(REPO_DATA, f"labelling_sheet_golden_sample_{labeller}.csv")
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow([
+                "item_id", "theme", "customer_message", "policy_excerpt",
+                "candidate_reply", "correctness_score_0_1_2", "politeness_score_0_1_2",
+                "completeness_score_0_1_2", "labeller_notes",
+            ])
+            for it in ITEMS:
+                w.writerow([
+                    it["item_id"], it["theme"], it["customer_message"],
+                    it["policy_excerpt"], it["candidate_reply"], "", "", "", "",
+                ])
+
+    theme_counts = Counter(it["theme"] for it in ITEMS)
+    reply_unchanged_count = sum(1 for it in ITEMS if it["reply_unchanged"])
+    message_unchanged_count = sum(1 for it in ITEMS if it["message_unchanged"])
+    fully_verbatim = sum(1 for it in ITEMS if it["reply_unchanged"] and it["message_unchanged"])
+    gap_items = sum(1 for it in ITEMS if not it["policy_rule_ids"])
+    edit_type_counts = Counter(e["type"] for it in ITEMS for e in it["edits"])
+
+    print(f"Wrote {len(ITEMS)} items to {jsonl_path}")
+    print("Theme distribution:", dict(theme_counts))
+    print(f"Replies fully unchanged (verbatim Bitext response): {reply_unchanged_count}/{len(ITEMS)}")
+    print(f"Messages fully unchanged (verbatim Bitext instruction): {message_unchanged_count}/{len(ITEMS)}")
+    print(f"Fully verbatim pairs (both sides untouched): {fully_verbatim}/{len(ITEMS)}")
+    print(f"Items with no matching policy rule (documented gap): {gap_items}/{len(ITEMS)}")
+    print("Edit type counts across all items:", dict(edit_type_counts))
+    print("Validation: OK (no errors, no unresolved {{placeholders}})")
+
+if __name__ == "__main__":
+    main()
