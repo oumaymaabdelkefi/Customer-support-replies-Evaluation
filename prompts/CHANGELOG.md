@@ -112,3 +112,38 @@ scores identical on 39/43 items (91%). Correctness 43/43, politeness
 42/43, completeness 40/43. The 4 changes were each one step on one axis
 (P18 politeness 1->0; G08, G31, G60 completeness 1->0), so agreement
 numbers carry roughly that much noise between runs.
+
+## judge_v2 -- 2026-10-25
+
+Changes vs judge_v1, all from the v1 dev disagreements with gold labels
+(score both labellers agree on; `data/gold_labels.csv`):
+
+- Correctness: extra detail the excerpt neither confirms nor contradicts
+  is 1, not 2 (guide v0.2 addendum; v1 missed G07, G10, G14, G22).
+- Correctness: omissions lower completeness only (guide v0.3; v1 docked
+  correctness for P03, G83).
+- Politeness: a short, courteous, factual reply is 2; empathy is only
+  expected when the customer reports a problem (all 8 v1 politeness
+  disagreements were v1 scoring such replies 1).
+- Completeness: don't penalise a wrong fact twice (G31, G33, G60).
+
+Before (judge_v1, 74 dev items, vs gold): kappa 0.656 / 0.675 / 0.652,
+exact 51/64, 55/63, 39/48 (`results/llm_judge_dev_1792957910.jsonl`).
+After: pending -- the run stopped at 15/74 items on the Groq free tier's
+daily limit (`results/llm_judge_v2_dev_1792958152.jsonl`); finish with
+`python scripts/run_pending.py`.
+
+## system_v1 / system_v2 -- 2026-10-25
+
+The prompted system under test (`harness/systems/reply_system.py`):
+`gpt-oss-20b` writes a reply from the customer message and policy
+excerpt, and the judge grades it on the same three axes.
+
+- system_v1: minimal prompt (be polite, use only the excerpt).
+- system_v2: adds the rubric's rules the writer must follow: exact policy
+  facts, no live lookups or "get back to you" (GEN-1 -- a v1 smoke-test
+  reply asked for an order number "so we can locate the order in our
+  system"), escalate policy gaps, cover every applicable condition,
+  acknowledge problems, keep it short.
+
+Scores on dev before/after: pending (`python scripts/run_pending.py`).

@@ -295,6 +295,7 @@ code { font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border
         <h2>Start a run</h2>
         <div class="controls">
           <select id="r-split"><option value="dev">Dev split</option><option value="test">Test split</option><option value="">All items</option></select>
+          <button class="btn" data-task="pending"><b>Continue all pending runs</b></button>
           <button class="btn" data-task="judge">Run LLM judge</button>
           <button class="btn" data-task="judge_v2">Run LLM judge v2</button>
           <button class="btn" data-task="reply">Run reply system (writes + judges replies)</button>

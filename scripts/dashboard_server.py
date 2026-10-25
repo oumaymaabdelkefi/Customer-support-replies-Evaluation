@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_dashboard import OUT_PATH, render_html  # noqa: E402
 
 PY = [sys.executable, "-u"]  # -u: unbuffered, so output streams live
-NEEDS_KEY = {"judge", "judge_v2", "position", "verbosity", "reply", "adversarial"}
+NEEDS_KEY = {"judge", "judge_v2", "position", "verbosity", "reply", "adversarial", "pending"}
 MAX_LOG_CHARS = 200_000
 
 
@@ -53,6 +53,8 @@ def task_commands(task: str, split: str) -> list[list[str]]:
     split_args = ["--split", split] if split in ("dev", "test") else []
     if task == "judge":
         return [PY + ["-m", "harness.run", "--system", "llm_judge", "--items", "data/golden_set.jsonl", *split_args]]
+    if task == "pending":
+        return [PY + ["scripts/run_pending.py"]]
     if task == "judge_v2":
         return [PY + ["-m", "harness.run", "--system", "llm_judge_v2", "--items", "data/golden_set.jsonl", *split_args]]
     if task == "reply":
