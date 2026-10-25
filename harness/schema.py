@@ -1,7 +1,7 @@
 """
 Fixed output schema for anything the harness scores (a judge, a baseline,
-a future trained model). This is the contract from ROLE_C_HANDOFF.md,
-confirmed here so Role C's judge and Role B's harness never drift apart.
+a future trained model). This is the single contract between the judge
+and the harness, so the two never drift apart.
 
 Score scale: 0 / 1 / 2 per axis, matching data/labelling_guide.md exactly.
   2 = fully meets the axis

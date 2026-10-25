@@ -122,8 +122,8 @@ each row still tells you which batch an item came from, so results can
 be split back apart for the comparison in step 2 below.
 
 1. Two teammates independently label `data/golden_set.jsonl` using
-   `data/labelling_sheet_labeler1.csv` / `..._labeler2.csv` (48 rows,
-   blank; same blind, independent process as before).
+   `data/labelling_sheet_labeler1_completed.csv` / `..._labeler2_completed.csv`
+   (48 rows; same blind, independent process as before).
 2. Check the resulting score distribution **specifically for the
    `golden_sample_stage1` rows** (filter on `batch`): if
    correctness/completeness are overwhelmingly stuck at one value (e.g.,

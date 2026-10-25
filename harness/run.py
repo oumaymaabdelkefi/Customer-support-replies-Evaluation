@@ -31,7 +31,7 @@ SPLITS_PATH = REPO_ROOT / "data" / "splits.json"
 
 # Fields a system is allowed to see. Pilot items carry extra internal-only
 # fields (challenge_type, author_note, source, ...) that must never reach
-# a system under test -- ROLE_C_HANDOFF.md is explicit about this.
+# a system under test: a human labeller never sees them either.
 INPUT_FIELDS = {"item_id", "customer_message", "policy_excerpt", "candidate_reply"}
 
 
