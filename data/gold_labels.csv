@@ -1,0 +1,151 @@
+item_id,split,batch,theme,correctness_score_0_1_2,correctness_status,politeness_score_0_1_2,politeness_status,completeness_score_0_1_2,completeness_status
+P01,test,pilot,returns,2,agreed,2,agreed,2,agreed
+P02,test,pilot,returns,0,agreed,1,agreed,,disputed (1 vs 0)
+P03,dev,pilot,returns,2,agreed,1,agreed,,disputed (0 vs 1)
+P04,dev,pilot,returns,2,agreed,2,agreed,2,agreed
+P05,dev,pilot,returns,2,agreed,2,agreed,2,agreed
+P06,dev,pilot,damaged_products,,disputed (1 vs 2),2,agreed,1,agreed
+P07,test,pilot,damaged_products,2,agreed,2,agreed,2,agreed
+P08,test,pilot,damaged_products,0,agreed,0,agreed,,disputed (1 vs 0)
+P09,dev,pilot,damaged_products,2,agreed,2,agreed,2,agreed
+P10,dev,pilot,damaged_products,0,agreed,2,agreed,0,agreed
+P11,dev,pilot,damaged_products,2,agreed,2,agreed,2,agreed
+P12,dev,pilot,damaged_products,0,agreed,1,agreed,0,agreed
+P13,dev,pilot,shipping,2,agreed,2,agreed,2,agreed
+P14,dev,pilot,shipping,0,agreed,1,agreed,0,agreed
+P15,test,pilot,shipping,2,agreed,2,agreed,2,agreed
+P16,dev,pilot,shipping,0,agreed,2,agreed,,disputed (1 vs 0)
+P17,dev,pilot,account_security,2,agreed,2,agreed,2,agreed
+P18,dev,pilot,account_security,0,agreed,2,agreed,0,agreed
+P19,test,pilot,account_security,0,agreed,1,agreed,0,agreed
+P20,test,pilot,account_security,2,agreed,0,agreed,1,agreed
+G01,test,golden_sample_stage1,returns,0,agreed,2,agreed,,disputed (1 vs 0)
+G02,test,golden_sample_stage1,returns,0,agreed,2,agreed,,disputed (1 vs 0)
+G03,test,golden_sample_stage1,returns,1,agreed,2,agreed,,disputed (1 vs 0)
+G04,dev,golden_sample_stage1,returns,1,agreed,2,agreed,,disputed (1 vs 0)
+G05,test,golden_sample_stage1,returns,0,agreed,2,agreed,0,agreed
+G06,test,golden_sample_stage1,returns,1,agreed,2,agreed,2,agreed
+G07,dev,golden_sample_stage1,returns,1,agreed,2,agreed,0,agreed
+G08,dev,golden_sample_stage1,returns,1,agreed,2,agreed,0,agreed
+G09,test,golden_sample_stage1,returns,1,agreed,2,agreed,0,agreed
+G10,dev,golden_sample_stage1,returns,1,agreed,2,agreed,0,agreed
+G11,test,golden_sample_stage1,shipping,0,agreed,2,agreed,,disputed (1 vs 0)
+G12,dev,golden_sample_stage1,shipping,1,agreed,2,agreed,0,agreed
+G13,test,golden_sample_stage1,shipping,1,agreed,2,agreed,,disputed (1 vs 0)
+G14,dev,golden_sample_stage1,shipping,1,agreed,2,agreed,,disputed (1 vs 0)
+G15,dev,golden_sample_stage1,shipping,0,agreed,2,agreed,0,agreed
+G16,test,golden_sample_stage1,shipping,0,agreed,1,agreed,,disputed (1 vs 0)
+G17,test,golden_sample_stage1,shipping,2,agreed,2,agreed,,disputed (1 vs 0)
+G18,test,golden_sample_stage1,shipping,0,agreed,2,agreed,,disputed (1 vs 0)
+G19,test,golden_sample_stage1,damaged_products,1,agreed,2,agreed,0,agreed
+G20,test,golden_sample_stage1,damaged_products,1,agreed,2,agreed,0,agreed
+G21,test,golden_sample_stage1,damaged_products,1,agreed,2,agreed,0,agreed
+G22,dev,golden_sample_stage1,damaged_products,1,agreed,2,agreed,0,agreed
+G23,test,golden_sample_stage1,account_security,2,agreed,2,agreed,1,agreed
+G24,test,golden_sample_stage1,account_security,1,agreed,2,agreed,,disputed (1 vs 0)
+G25,test,golden_sample_stage1,account_security,0,agreed,2,agreed,,disputed (1 vs 0)
+G26,test,golden_sample_stage1,account_security,1,agreed,2,agreed,0,agreed
+G27,test,golden_sample_stage1,account_security,0,agreed,2,agreed,0,agreed
+G28,dev,golden_sample_stage1,account_security,1,agreed,2,agreed,,disputed (1 vs 0)
+G29,dev,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G30,test,golden_sample_stage2,returns,2,agreed,,disputed (1 vs 2),2,agreed
+G31,dev,golden_sample_stage2,returns,0,agreed,2,agreed,1,agreed
+G32,test,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G33,dev,golden_sample_stage2,returns,0,agreed,2,agreed,1,agreed
+G34,dev,golden_sample_stage2,returns,,disputed (2 vs 0),2,agreed,,disputed (2 vs 1)
+G35,test,golden_sample_stage2,returns,,disputed (2 vs 1),2,agreed,2,agreed
+G36,test,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G37,dev,golden_sample_stage2,damaged_products,,disputed (2 vs 1),2,agreed,2,agreed
+G38,test,golden_sample_stage2,damaged_products,1,agreed,2,agreed,1,agreed
+G39,test,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G40,dev,golden_sample_stage2,damaged_products,2,agreed,,disputed (0 vs 1),2,agreed
+G41,test,golden_sample_stage2,damaged_products,,disputed (2 vs 1),,disputed (1 vs 0),2,agreed
+G42,test,golden_sample_stage2,damaged_products,0,agreed,2,agreed,1,agreed
+G43,dev,golden_sample_stage2,damaged_products,0,agreed,2,agreed,,disputed (0 vs 1)
+G44,dev,golden_sample_stage2,damaged_products,,disputed (2 vs 1),2,agreed,2,agreed
+G45,test,golden_sample_stage2,shipping,2,agreed,,disputed (1 vs 2),2,agreed
+G46,test,golden_sample_stage2,shipping,,disputed (2 vs 1),2,agreed,2,agreed
+G47,test,golden_sample_stage2,shipping,2,agreed,2,agreed,2,agreed
+G48,dev,golden_sample_stage2,shipping,0,agreed,2,agreed,,disputed (0 vs 1)
+G49,dev,golden_sample_stage2,shipping,2,agreed,,disputed (2 vs 1),2,agreed
+G50,dev,golden_sample_stage2,shipping,0,agreed,,disputed (2 vs 0),,disputed (0 vs 1)
+G51,dev,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G52,test,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G53,test,golden_sample_stage2,account_security,,disputed (0 vs 2),,disputed (0 vs 2),1,agreed
+G54,dev,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G55,dev,golden_sample_stage2,account_security,0,agreed,,disputed (1 vs 2),,disputed (0 vs 1)
+G56,dev,golden_sample_stage2,account_security,0,agreed,2,agreed,,disputed (0 vs 1)
+G57,dev,golden_sample_stage2,account_security,0,agreed,2,agreed,,disputed (0 vs 1)
+G58,test,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G59,test,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G60,dev,golden_sample_stage2,returns,,disputed (1 vs 0),2,agreed,1,agreed
+G61,dev,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G62,test,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G63,test,golden_sample_stage2,damaged_products,0,agreed,,disputed (0 vs 1),0,agreed
+G64,dev,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G65,dev,golden_sample_stage2,shipping,2,agreed,2,agreed,,disputed (1 vs 2)
+G66,test,golden_sample_stage2,shipping,,disputed (2 vs 1),,disputed (2 vs 1),,disputed (2 vs 1)
+G67,dev,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G68,test,golden_sample_stage2,account_security,,disputed (0 vs 1),2,agreed,1,agreed
+G69,test,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G70,test,golden_sample_stage2,returns,0,agreed,,disputed (0 vs 1),,disputed (0 vs 1)
+G71,dev,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G72,dev,golden_sample_stage2,returns,0,agreed,2,agreed,,disputed (0 vs 1)
+G73,test,golden_sample_stage2,returns,2,agreed,1,agreed,,disputed (1 vs 2)
+G74,dev,golden_sample_stage2,returns,2,agreed,,disputed (2 vs 1),1,agreed
+G75,test,golden_sample_stage2,returns,,disputed (0 vs 1),2,agreed,0,agreed
+G76,dev,golden_sample_stage2,returns,1,agreed,2,agreed,,disputed (1 vs 2)
+G77,test,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G78,dev,golden_sample_stage2,returns,0,agreed,2,agreed,,disputed (0 vs 1)
+G79,dev,golden_sample_stage2,returns,2,agreed,2,agreed,2,agreed
+G80,test,golden_sample_stage2,returns,0,agreed,2,agreed,,disputed (0 vs 1)
+G81,dev,golden_sample_stage2,returns,,disputed (0 vs 2),0,agreed,,disputed (0 vs 1)
+G82,dev,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G83,dev,golden_sample_stage2,damaged_products,2,agreed,2,agreed,1,agreed
+G84,dev,golden_sample_stage2,damaged_products,0,agreed,1,agreed,,disputed (0 vs 1)
+G85,test,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G86,test,golden_sample_stage2,damaged_products,0,agreed,1,agreed,,disputed (0 vs 1)
+G87,test,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G88,test,golden_sample_stage2,damaged_products,0,agreed,2,agreed,,disputed (0 vs 1)
+G89,dev,golden_sample_stage2,damaged_products,1,agreed,2,agreed,1,agreed
+G90,test,golden_sample_stage2,damaged_products,0,agreed,1,agreed,,disputed (0 vs 1)
+G91,test,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G92,dev,golden_sample_stage2,damaged_products,0,agreed,,disputed (0 vs 1),,disputed (0 vs 1)
+G93,test,golden_sample_stage2,damaged_products,,disputed (2 vs 1),0,agreed,2,agreed
+G94,dev,golden_sample_stage2,damaged_products,2,agreed,,disputed (2 vs 1),2,agreed
+G95,test,golden_sample_stage2,damaged_products,,disputed (1 vs 0),2,agreed,1,agreed
+G96,dev,golden_sample_stage2,damaged_products,2,agreed,2,agreed,2,agreed
+G97,dev,golden_sample_stage2,damaged_products,,disputed (0 vs 1),2,agreed,,disputed (0 vs 1)
+G98,dev,golden_sample_stage2,shipping,,disputed (1 vs 2),,disputed (1 vs 2),,disputed (1 vs 2)
+G99,test,golden_sample_stage2,shipping,0,agreed,1,agreed,,disputed (0 vs 1)
+G100,test,golden_sample_stage2,shipping,1,agreed,1,agreed,0,agreed
+G101,test,golden_sample_stage2,shipping,2,agreed,2,agreed,2,agreed
+G102,dev,golden_sample_stage2,shipping,,disputed (0 vs 1),,disputed (1 vs 2),,disputed (0 vs 1)
+G103,dev,golden_sample_stage2,shipping,2,agreed,2,agreed,2,agreed
+G104,test,golden_sample_stage2,shipping,0,agreed,2,agreed,,disputed (0 vs 1)
+G105,dev,golden_sample_stage2,shipping,2,agreed,0,agreed,,disputed (1 vs 2)
+G106,dev,golden_sample_stage2,shipping,2,agreed,2,agreed,2,agreed
+G107,test,golden_sample_stage2,shipping,0,agreed,1,agreed,,disputed (0 vs 1)
+G108,test,golden_sample_stage2,shipping,2,agreed,2,agreed,2,agreed
+G109,dev,golden_sample_stage2,shipping,0,agreed,1,agreed,,disputed (0 vs 1)
+G110,dev,golden_sample_stage2,shipping,1,agreed,1,agreed,1,agreed
+G111,test,golden_sample_stage2,shipping,2,agreed,2,agreed,,disputed (1 vs 2)
+G112,dev,golden_sample_stage2,shipping,2,agreed,1,agreed,2,agreed
+G113,test,golden_sample_stage2,shipping,0,agreed,1,agreed,,disputed (0 vs 1)
+G114,test,golden_sample_stage2,shipping,,disputed (0 vs 1),1,agreed,,disputed (0 vs 1)
+G115,dev,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G116,test,golden_sample_stage2,account_security,0,agreed,,disputed (1 vs 2),,disputed (0 vs 1)
+G117,test,golden_sample_stage2,account_security,2,agreed,,disputed (0 vs 1),1,agreed
+G118,test,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G119,dev,golden_sample_stage2,account_security,,disputed (1 vs 2),1,agreed,1,agreed
+G120,test,golden_sample_stage2,account_security,,disputed (0 vs 1),1,agreed,0,agreed
+G121,dev,golden_sample_stage2,account_security,2,agreed,,disputed (2 vs 1),2,agreed
+G122,dev,golden_sample_stage2,account_security,0,agreed,,disputed (1 vs 2),,disputed (0 vs 1)
+G123,dev,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G124,test,golden_sample_stage2,account_security,0,agreed,1,agreed,,disputed (0 vs 1)
+G125,dev,golden_sample_stage2,account_security,2,agreed,0,agreed,2,agreed
+G126,test,golden_sample_stage2,account_security,,disputed (1 vs 2),2,agreed,,disputed (1 vs 2)
+G127,dev,golden_sample_stage2,account_security,0,agreed,2,agreed,,disputed (0 vs 1)
+G128,dev,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed
+G129,test,golden_sample_stage2,account_security,0,agreed,,disputed (0 vs 2),,disputed (0 vs 1)
+G130,test,golden_sample_stage2,account_security,2,agreed,2,agreed,2,agreed

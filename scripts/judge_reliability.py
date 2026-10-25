@@ -116,8 +116,8 @@ def build_report(judge: dict[str, dict | None], human: dict[str, dict]) -> str:
         "",
         "## Kappa per axis (judge vs. human)",
         "",
-        "| Axis | N | Skipped (human NA) | Kappa | Interpretation |",
-        "|---|---|---|---|---|",
+        "| Axis | N | Skipped (human NA/disputed) | Exact agreement | Kappa | Interpretation |",
+        "|---|---|---|---|---|---|",
     ]
 
     disagreement_sections = []
@@ -138,8 +138,10 @@ def build_report(judge: dict[str, dict | None], human: dict[str, dict]) -> str:
 
         kappa = cohen_kappa(pairs)
         kappa_str = f"{kappa:.3f}" if kappa is not None else "n/a"
+        same = len(pairs) - len(disagreements)
+        exact = f"{same}/{len(pairs)} ({same / len(pairs):.0%})" if pairs else "n/a"
         lines.append(
-            f"| {axis} | {len(pairs)} | {skipped} | {kappa_str} | {interpret(kappa)} |"
+            f"| {axis} | {len(pairs)} | {skipped} | {exact} | {kappa_str} | {interpret(kappa)} |"
         )
 
         section = [f"### {axis} ({len(disagreements)} disagreements)", ""]

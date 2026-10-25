@@ -56,6 +56,20 @@ def read_labels(*paths: Path) -> dict[str, dict]:
     return labels
 
 
+def read_gold(path: Path) -> dict[str, dict]:
+    """Per-axis gold scores (agreed by both labellers); None where disputed."""
+    gold = {}
+    if path.exists():
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                scores = {a: (int(v) if (v := row.get(f"{a}_score_0_1_2", "").strip()) in ("0", "1", "2") else None)
+                          for a in AXES}
+                if any(v is not None for v in scores.values()):
+                    gold[row["item_id"]] = {**scores, "notes": "; ".join(
+                        f"{a}: {row[f'{a}_status']}" for a in AXES if scores[a] is None)}
+    return gold
+
+
 def run_timestamp(path: Path) -> int:
     try:
         return int(path.stem.rsplit("_", 1)[1])
@@ -97,6 +111,7 @@ def collect(judge_run: Path | None) -> dict:
     splits = json.loads(splits_path.read_text(encoding="utf-8"))["items"] if splits_path.exists() else {}
     h1 = read_labels(DATA / "labelling_sheet_labeler1_completed.csv", DATA / "labelling_sheet_labeler1_stage2.csv")
     h2 = read_labels(DATA / "labelling_sheet_labeler2_completed.csv", DATA / "labelling_sheet_labeler2_stage2.csv")
+    gold = read_gold(DATA / "gold_labels.csv")
 
     judge_runs = sorted(RESULTS.glob("llm_judge_*.jsonl"), key=run_timestamp)
     runs = [summarize_run(p) for p in judge_runs]
@@ -121,6 +136,7 @@ def collect(judge_run: Path | None) -> dict:
                 "judge": judge.get(i),
                 "h1": h1.get(i),
                 "h2": h2.get(i),
+                "gold": gold.get(i),
             }
         )
 
@@ -248,6 +264,7 @@ code { font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border
       <select id="f-who">
         <option value="h1">Compare judge with labeller 1</option>
         <option value="h2">Compare judge with labeller 2</option>
+        <option value="gold">Compare judge with gold (both labellers agree)</option>
       </select>
       <label class="chk"><input type="checkbox" id="f-dis"> Only disagreements</label>
       <label class="chk"><input type="checkbox" id="f-judged" checked> Only judged items</label>
@@ -279,6 +296,9 @@ code { font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border
         <div class="controls">
           <select id="r-split"><option value="dev">Dev split</option><option value="test">Test split</option><option value="">All items</option></select>
           <button class="btn" data-task="judge">Run LLM judge</button>
+          <button class="btn" data-task="judge_v2">Run LLM judge v2</button>
+          <button class="btn" data-task="reply">Run reply system (writes + judges replies)</button>
+          <button class="btn" data-task="adversarial">Run adversarial test</button>
           <button class="btn" data-task="baseline">Run keyword baseline (no key)</button>
           <button class="btn" data-task="position">Run position-bias test</button>
           <button class="btn" data-task="verbosity">Run verbosity-bias test</button>
@@ -316,7 +336,7 @@ const kClass = (k) => k === null ? "" : k >= 0.6 ? "ok" : k >= 0.4 ? "warn" : "f
 function agreement(who, items) {
   const out = {};
   for (const a of AXES) {
-    const pairs = items.filter((i) => i.judge && !i.judge.error && i[who]).map((i) => [i.judge[a], i[who][a]]);
+    const pairs = items.filter((i) => i.judge && !i.judge.error && i[who] && i[who][a] !== null && i[who][a] !== undefined).map((i) => [i.judge[a], i[who][a]]);
     out[a] = { n: pairs.length, same: pairs.filter(([x, y]) => x === y).length, k: kappa(pairs) };
   }
   return out;
@@ -360,20 +380,22 @@ function verbosityStats() {
 function renderOverview() {
   const items = DATA.items, judged = items.filter((i) => i.judge && !i.judge.error);
   const labelled = items.filter((i) => i.h1 && i.h2).length;
-  const ag = agreement("h1", items), ps = positionStats(), vs = verbosityStats();
+  const ag = agreement("gold", items), ps = positionStats(), vs = verbosityStats();
   const lastRun = DATA.runs.filter((r) => r.calls).slice(-1)[0];
   const minK = Math.min(...AXES.map((a) => ag[a].k ?? 1));
   let html = '<div class="cards">';
   html += `<div class="card"><h3>Golden set</h3><div class="big">${items.length}</div><div class="verdict ${items.length >= 150 ? "ok" : "warn"}">${items.length >= 150 ? "meets 150+ target" : `${150 - items.length} more needed for 150+`}</div></div>`;
   html += `<div class="card"><h3>Labelled by both people</h3><div class="big">${labelled}</div><div class="verdict ${labelled === items.length ? "ok" : "warn"}">${items.length - labelled} items still unlabelled</div></div>`;
-  html += `<div class="card"><h3>Judge vs labeller 1 (lowest κ)</h3><div class="big ${kClass(isFinite(minK) ? minK : null)}">${judged.length ? minK.toFixed(2) : "–"}</div><div class="verdict">${judged.length} items judged · target κ ≥ 0.6</div></div>`;
+  html += `<div class="card"><h3>Judge vs gold labels (lowest κ)</h3><div class="big ${kClass(isFinite(minK) ? minK : null)}">${judged.length ? minK.toFixed(2) : "–"}</div><div class="verdict">${judged.length} items judged · target κ ≥ 0.6</div></div>`;
   html += ps ? `<div class="card"><h3>Position bias</h3><div class="big ${ps.flipped ? "fail" : "ok"}">${pct(ps.flipped, ps.both)}</div><div class="verdict">verdicts changed after swapping order</div></div>`
              : `<div class="card"><h3>Position bias</h3><div class="big sx">not run</div><div class="verdict">python scripts/position_bias.py</div></div>`;
   html += vs ? `<div class="card"><h3>Verbosity bias</h3><div class="big ${vs.up ? "fail" : "ok"}">${pct(vs.up, vs.n)}</div><div class="verdict">padded replies whose total grade went up</div></div>`
              : `<div class="card"><h3>Verbosity bias</h3><div class="big sx">not run</div><div class="verdict">see the Verbosity bias tab</div></div>`;
   if (lastRun) html += `<div class="card"><h3>Cost per judged item</h3><div class="big">$${(lastRun.cost / lastRun.calls).toFixed(5)}</div><div class="verdict">paid-tier equivalent · p50 ${lastRun.p50 ? lastRun.p50.toFixed(2) + "s" : "–"} · $0 on free tier</div></div>`;
   html += "</div>";
-  html += agreeTable("Judge vs labeller 1", ag, `Judge run: <code>${esc(DATA.judge_file || "none")}</code>. Only items both judged and labelled are counted.`);
+  html += agreeTable("Judge vs gold labels", ag, `Judge run: <code>${esc(DATA.judge_file || "none")}</code>. Gold = the score both labellers agreed on; disputed axes are left out.`);
+  html += agreeTable("Judge vs labeller 1", agreement("h1", items), "Every item labeller 1 scored, including ones the labellers disagree on.");
+  html += agreeTable("Judge vs labeller 2", agreement("h2", items), "Every item labeller 2 scored.");
   html += agreeTable("Labeller 1 vs labeller 2 (human agreement)", humanAgreement(items), "How often the two humans agree. The judge can't be expected to agree with humans more than they agree with each other.");
   $("#overview").innerHTML = html;
 }
@@ -382,18 +404,18 @@ let openId = null;
 function renderItems() {
   const split = $("#f-split").value, who = $("#f-who").value, dis = $("#f-dis").checked,
         judgedOnly = $("#f-judged").checked, q = $("#f-q").value.toLowerCase().trim();
-  const isDis = (i) => i.judge && !i.judge.error && i[who] && AXES.some((a) => i.judge[a] !== i[who][a]);
+  const isDis = (i) => i.judge && !i.judge.error && i[who] && AXES.some((a) => i[who][a] !== null && i.judge[a] !== i[who][a]);
   const rows = DATA.items.filter((i) =>
     (!split || i.split === split) && (!judgedOnly || i.judge) && (!dis || isDis(i)) &&
     (!q || [i.id, i.message, i.reply, i.theme].join(" ").toLowerCase().includes(q)));
-  let html = `<tr><th>Item</th><th>Split</th><th>Theme</th><th>Judge</th><th>Labeller 1</th><th>Labeller 2</th><th>Customer message</th></tr>`;
+  let html = `<tr><th>Item</th><th>Split</th><th>Theme</th><th>Judge</th><th>Gold</th><th>Labeller 1</th><th>Labeller 2</th><th>Customer message</th></tr>`;
   for (const i of rows) {
     html += `<tr class="item ${isDis(i) ? "dis" : ""}" data-id="${i.id}"><td><b>${i.id}</b></td><td>${i.split}</td><td>${esc(i.theme)}</td>
-      <td>${trio(i.judge)}</td><td>${trio(i.h1)}</td><td>${trio(i.h2)}</td><td>${esc(i.message.slice(0, 90))}${i.message.length > 90 ? "…" : ""}</td></tr>`;
+      <td>${trio(i.judge)}</td><td>${trio(i.gold)}</td><td>${trio(i.h1)}</td><td>${trio(i.h2)}</td><td>${esc(i.message.slice(0, 90))}${i.message.length > 90 ? "…" : ""}</td></tr>`;
     if (openId === i.id) {
       const j = i.judge || {};
       const reasons = j.error ? `<p class="fail">${esc(j.error)}</p>` : AXES.map((a) => `<p>${chip(j[a])} <b>${a}:</b> ${esc(j[a + "_reason"] || "")}</p>`).join("");
-      html += `<tr class="detail"><td colspan="7"><div class="grid">
+      html += `<tr class="detail"><td colspan="8"><div class="grid">
         <div><h4>Customer message</h4><p>${esc(i.message)}</p><h4>Policy excerpt</h4><p>${esc(i.policy)}</p></div>
         <div><h4>Candidate reply</h4><p>${esc(i.reply)}</p>${i.intent ? `<h4>Author's intent</h4><p>${esc(i.intent)}</p>` : ""}</div>
         <div><h4>Judge's reasons</h4>${i.judge ? reasons : "<p>Not judged in this run.</p>"}

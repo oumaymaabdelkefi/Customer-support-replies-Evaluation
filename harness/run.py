@@ -74,8 +74,20 @@ def resolve_system(name: str):
         from harness.systems.judge_stub import llm_judge
 
         return llm_judge
+    # llm_judge_v2 -> prompts/judge_v2.txt; reply_v1 -> prompts/system_v1.txt
+    for prefix in ("llm_judge_v", "reply_v"):
+        if name.startswith(prefix) and name[len(prefix):].isdigit():
+            version = int(name[len(prefix):])
+            if prefix == "llm_judge_v":
+                from harness.systems.judge_stub import make_llm_judge
+
+                return make_llm_judge(version)
+            from harness.systems.reply_system import make_reply_system
+
+            return make_reply_system(version)
     raise ValueError(
-        f"Unknown system '{name}'. Available: {list(BASELINE_SYSTEMS) + ['llm_judge']}"
+        f"Unknown system '{name}'. Available: {list(BASELINE_SYSTEMS)} + "
+        "llm_judge, llm_judge_v<N> (prompts/judge_v<N>.txt), reply_v<N> (prompts/system_v<N>.txt)"
     )
 
 

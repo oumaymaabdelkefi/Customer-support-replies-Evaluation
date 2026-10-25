@@ -47,7 +47,12 @@ from pathlib import Path
 from harness.errors import QuotaExhausted
 from harness.schema import ItemInput
 
-PROMPT_PATH = Path(__file__).resolve().parent.parent.parent / "prompts" / "judge_v1.txt"
+PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+# The judge prompt version used by `llm_judge` (and by the reply system to
+# grade its replies). Override per run with JUDGE_PROMPT_VERSION=2, or run
+# a specific version as the system "llm_judge_v2".
+DEFAULT_JUDGE_VERSION = int(os.environ.get("JUDGE_PROMPT_VERSION", "1"))
+PROMPT_PATH = PROMPTS_DIR / f"judge_v{DEFAULT_JUDGE_VERSION}.txt"
 MODEL_NAME = "openai/gpt-oss-120b"
 BASE_URL = "https://api.groq.com/openai/v1"
 
@@ -92,24 +97,22 @@ JUDGE_RESPONSE_FORMAT = {
     },
 }
 
-_PROMPT_TEMPLATE: str | None = None
+_TEMPLATES: dict[int, str] = {}
 _last_call_time: float = 0.0  # module-level, shared across calls in one run
 
 
-def _load_template() -> str:
-    global _PROMPT_TEMPLATE
-    if _PROMPT_TEMPLATE is None:
-        if not PROMPT_PATH.exists():
-            raise FileNotFoundError(
-                f"Judge prompt not found at {PROMPT_PATH}. "
-                "Make sure prompts/judge_v1.txt is in the repo."
-            )
-        _PROMPT_TEMPLATE = PROMPT_PATH.read_text(encoding="utf-8")
-    return _PROMPT_TEMPLATE
+def _load_template(version: int | None = None) -> str:
+    version = version or DEFAULT_JUDGE_VERSION
+    if version not in _TEMPLATES:
+        path = PROMPTS_DIR / f"judge_v{version}.txt"
+        if not path.exists():
+            raise FileNotFoundError(f"Judge prompt not found at {path}.")
+        _TEMPLATES[version] = path.read_text(encoding="utf-8")
+    return _TEMPLATES[version]
 
 
-def _build_prompt(item: ItemInput) -> str:
-    return _load_template().format(
+def _build_prompt(item: ItemInput, version: int | None = None) -> str:
+    return _load_template(version).format(
         item_id=item.item_id,
         customer_message=item.customer_message,
         policy_excerpt=item.policy_excerpt,
@@ -166,19 +169,24 @@ def _is_daily_quota_error(error) -> bool:
     return "(TPD)" in text or "(RPD)" in text or "per day" in text.lower()
 
 
-def _cost_usd(prompt_tokens: int, completion_tokens: int) -> float:
-    return (
-        prompt_tokens * PRICE_PER_M_INPUT_TOKENS
-        + completion_tokens * PRICE_PER_M_OUTPUT_TOKENS
-    ) / 1_000_000
+def _cost_usd(prompt_tokens: int, completion_tokens: int, prices: tuple[float, float] | None = None) -> float:
+    price_in, price_out = prices or (PRICE_PER_M_INPUT_TOKENS, PRICE_PER_M_OUTPUT_TOKENS)
+    return (prompt_tokens * price_in + completion_tokens * price_out) / 1_000_000
 
 
-def call_groq(prompt: str, response_format: dict, label: str) -> dict:
-    """One chat-completion call to Groq with retry/backoff, returning the
-    parsed JSON object plus a "_meta" dict (tokens, latency, cost).
-    Shared by the single-reply judge below and the pairwise judge used
-    for the position-bias test (scripts/position_bias.py). `label` only
-    appears in progress messages."""
+def chat_groq(
+    prompt: str,
+    label: str,
+    *,
+    model: str = MODEL_NAME,
+    response_format: dict | None = None,
+    prices: tuple[float, float] | None = None,
+    temperature: float = 0,
+) -> tuple[str, dict]:
+    """One chat-completion call to Groq with retry/backoff. Returns the raw
+    text and a meta dict (model, tokens, latency, USD cost at `prices`,
+    USD per 1M input/output tokens). `label` only appears in progress
+    messages. Used by the judge, the pairwise judge and the reply system."""
     try:
         import openai
     except ImportError as e:
@@ -207,12 +215,13 @@ def call_groq(prompt: str, response_format: dict, label: str) -> dict:
         _throttle()
         started = time.monotonic()
         try:
+            extra = {"response_format": response_format} if response_format else {}
             response = client.chat.completions.create(
-                model=MODEL_NAME,
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0,  # deterministic-as-possible grading, not creative writing
+                temperature=temperature,  # 0 for grading: deterministic as possible
                 max_tokens=2048,  # generous headroom in case the model reasons before answering
-                response_format=response_format,
+                **extra,
             )
             latency_s = time.monotonic() - started
             break  # success -- fall through to JSON parsing below
@@ -246,14 +255,21 @@ def call_groq(prompt: str, response_format: dict, label: str) -> dict:
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     meta = {
-        "model": MODEL_NAME,
+        "model": model,
         "latency_s": round(latency_s, 3),
         "attempts": attempt,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
-        "cost_usd": _cost_usd(prompt_tokens, completion_tokens),
+        "cost_usd": _cost_usd(prompt_tokens, completion_tokens, prices),
     }
+    return raw_text or "", meta
 
+
+def call_groq(prompt: str, response_format: dict, label: str) -> dict:
+    """Judge-model call that must return JSON: the parsed object plus a
+    "_meta" dict (tokens, latency, cost). Shared by the single-reply judge
+    below and the pairwise judge (scripts/position_bias.py)."""
+    raw_text, meta = chat_groq(prompt, label, response_format=response_format)
     try:
         parsed = _extract_json(raw_text)
     except json.JSONDecodeError as e:
@@ -269,5 +285,16 @@ def call_groq(prompt: str, response_format: dict, label: str) -> dict:
     return parsed
 
 
+def make_llm_judge(version: int):
+    def judge(item: ItemInput) -> dict:
+        result = call_groq(_build_prompt(item, version), JUDGE_RESPONSE_FORMAT, item.item_id)
+        if isinstance(result.get("_meta"), dict):
+            result["_meta"]["judge_prompt"] = f"judge_v{version}.txt"
+        return result
+
+    judge.__name__ = f"llm_judge_v{version}"
+    return judge
+
+
 def llm_judge(item: ItemInput) -> dict:
-    return call_groq(_build_prompt(item), JUDGE_RESPONSE_FORMAT, item.item_id)
+    return make_llm_judge(DEFAULT_JUDGE_VERSION)(item)
