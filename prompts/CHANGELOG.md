@@ -80,3 +80,28 @@ one-sentence `reason`. It tells the model that length and order are not
 criteria. The bias test measures whether it actually ignores them.
 
 No score yet: first run pending (10 pairs x 2 orders = 20 calls).
+
+## judge_v1 -- 2026-10-25 re-measured (structured output, dev split)
+
+Run: `results/llm_judge_dev_1792945689.jsonl` (43 dev items, 43/43
+parsed, $0.000563/item paid-tier eq., p50 latency 1.66s). Compared on the
+22 dev items both humans have labelled (Cohen's kappa):
+
+| Axis | vs. labeller 1 | vs. labeller 2 |
+|---|---|---|
+| correctness | 0.210 | 0.253 |
+| politeness | 0.831 | 0.831 |
+| completeness | 0.251 | 0.519 |
+
+Much lower than the 20-item pilot numbers (0.81 / 0.81 / 0.69): the
+golden-sample items are harder than the pilot. Main pattern in the
+correctness disagreements: when a reply *omits* the applicable rule
+(e.g. G15 never mentions SHIP-3's processing-vs-shipped condition, G07
+deflects instead of giving RET-1/RET-4), humans lower correctness but the
+judge only lowers completeness ("no contradiction"). On policy-gap items
+(G04, G28) the judge is harsher than humans (0 vs 1). This is the target
+for judge_v2, and also a labelling-guide question: should an omission
+count against correctness at all?
+
+Position bias (pairwise_v1, `results/position_bias_1792945160.jsonl`):
+0/10 verdicts changed after swapping order; first-shown reply won 10/20.

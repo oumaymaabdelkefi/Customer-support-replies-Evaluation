@@ -52,7 +52,7 @@ def load_judge_results(path: Path) -> dict[str, dict | None]:
 def load_human_labels(path: Path) -> dict[str, dict]:
     """item_id -> {axis: score}, skipping blank/NA cells per axis."""
     out: dict[str, dict] = {}
-    with open(path, encoding="utf-8", newline="") as f:
+    with open(path, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             item_id = row["item_id"]
