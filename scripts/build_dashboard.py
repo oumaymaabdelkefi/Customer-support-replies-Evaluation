@@ -215,12 +215,15 @@ tr.dis { background: var(--flag); }
 .detail h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; }
 .detail p { margin: 0 0 10px; white-space: pre-wrap; }
 .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-select, input[type=search] { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+select, input[type=search], input[type=password] { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--panel); color: var(--text); }
 input[type=search] { flex: 1; min-width: 160px; }
 label.chk { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
 .legend { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
 .empty { color: var(--muted); padding: 20px 0; }
+.btn { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
 code { font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
@@ -234,6 +237,7 @@ code { font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border
     <button data-tab="position">Position bias</button>
     <button data-tab="verbosity">Verbosity bias</button>
     <button data-tab="runs">Runs &amp; cost</button>
+    <button data-tab="run">▶ Run tests</button>
   </nav>
 </header>
 <main>
@@ -255,6 +259,40 @@ code { font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border
   <section id="position"></section>
   <section id="verbosity"></section>
   <section id="runs"></section>
+  <section id="run">
+    <div class="panel" id="run-offline">
+      <h2>Run tests from this page</h2>
+      <p>This page was opened as a file, so it can't start Python. Start the interface instead:</p>
+      <p><code>python scripts/dashboard_server.py</code></p>
+      <p class="legend">It opens <code>http://localhost:8765</code>, where this tab has working buttons.</p>
+    </div>
+    <div id="run-online" style="display:none">
+      <div class="panel">
+        <h2>Groq API key</h2>
+        <div class="controls">
+          <input type="password" id="r-key" placeholder="gsk_… (only needed if GROQ_API_KEY isn't set; kept in memory, never saved)" style="flex:1;min-width:240px">
+        </div>
+        <p class="legend" id="r-keystate"></p>
+      </div>
+      <div class="panel">
+        <h2>Start a run</h2>
+        <div class="controls">
+          <select id="r-split"><option value="dev">Dev split</option><option value="test">Test split</option><option value="">All items</option></select>
+          <button class="btn" data-task="judge">Run LLM judge</button>
+          <button class="btn" data-task="baseline">Run keyword baseline (no key)</button>
+          <button class="btn" data-task="position">Run position-bias test</button>
+          <button class="btn" data-task="verbosity">Run verbosity-bias test</button>
+          <button class="btn" data-task="tests">Run unit tests (no key)</button>
+        </div>
+        <p class="legend">One run at a time. The free tier allows roughly 100 judge calls a day: a dev-split judge run is about 43 calls, position bias 20, verbosity bias about 43.</p>
+      </div>
+      <div class="panel">
+        <h2 id="r-title">Output</h2>
+        <pre id="r-log" style="max-height:420px;overflow:auto;white-space:pre-wrap;margin:0;font-size:13px"></pre>
+        <div class="controls" style="margin-top:10px"><button class="btn" id="r-reload" style="display:none">Show new results</button></div>
+      </div>
+    </div>
+  </section>
 </main>
 <script>
 const DATA = __DATA__;
@@ -416,12 +454,44 @@ function renderRuns() {
 }
 
 $("#sub").textContent = `Generated ${DATA.generated} · judge run ${DATA.judge_file || "none"} · rebuild with: python scripts/build_dashboard.py`;
-$("#nav").addEventListener("click", (e) => {
-  const b = e.target.closest("button"); if (!b) return;
+function showTab(tab) {
+  const b = document.querySelector(`nav button[data-tab="${tab}"]`); if (!b) return;
   document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
-  document.querySelectorAll("main section").forEach((s) => s.classList.toggle("on", s.id === b.dataset.tab));
-});
+  document.querySelectorAll("main section").forEach((s) => s.classList.toggle("on", s.id === tab));
+  history.replaceState(null, "", "#" + tab);
+}
+$("#nav").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
+if (location.hash) showTab(location.hash.slice(1));
 renderOverview(); renderItems(); renderPosition(); renderVerbosity(); renderRuns();
+
+// ---- Run tests tab: only works when served by scripts/dashboard_server.py
+if (location.protocol.startsWith("http")) {
+  $("#run-offline").style.display = "none";
+  $("#run-online").style.display = "block";
+  let wasRunning = false;
+  async function poll() {
+    try {
+      const s = await (await fetch("/status")).json();
+      $("#r-keystate").textContent = s.key_set ? "A key is available (environment or entered above)." : "No key yet: enter one above to run the LLM judge or bias tests.";
+      document.querySelectorAll("button[data-task]").forEach((b) => (b.disabled = s.running));
+      $("#r-title").textContent = s.task ? `Output: ${s.task}` + (s.running ? " (running…)" : s.exit_code === 0 ? " (finished)" : ` (failed, exit ${s.exit_code})`) : "Output";
+      const log = $("#r-log"), atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+      log.textContent = s.log || "Nothing run yet.";
+      if (atBottom) log.scrollTop = log.scrollHeight;
+      if (wasRunning && !s.running) $("#r-reload").style.display = "inline-block";
+      wasRunning = s.running;
+    } catch (e) { $("#r-title").textContent = "Output (server not reachable)"; }
+  }
+  document.querySelectorAll("button[data-task]").forEach((b) => b.addEventListener("click", async () => {
+    $("#r-reload").style.display = "none";
+    const r = await fetch("/run", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: b.dataset.task, split: $("#r-split").value, key: $("#r-key").value.trim() }) });
+    if (!r.ok) alert(await r.text());
+    poll();
+  }));
+  $("#r-reload").addEventListener("click", () => location.reload());
+  poll(); setInterval(poll, 1500);
+}
 </script>
 </body>
 </html>
@@ -434,11 +504,16 @@ def main():
     parser.add_argument("--out", type=Path, default=OUT_PATH)
     args = parser.parse_args()
 
-    data = collect(args.judge_run)
-    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    args.out.write_text(PAGE.replace("__DATA__", payload), encoding="utf-8")
+    html, data = render_html(args.judge_run)
+    args.out.write_text(html, encoding="utf-8")
     print(f"Wrote {args.out} -- open it in a browser.")
     print(f"Judge run shown: {data['judge_file']}")
+
+
+def render_html(judge_run: Path | None = None) -> tuple[str, dict]:
+    data = collect(judge_run)
+    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    return PAGE.replace("__DATA__", payload), data
 
 
 if __name__ == "__main__":

@@ -67,6 +67,18 @@ python -m harness.run --system llm_judge --items data/bias/verbosity_padded.json
 python scripts/verbosity_bias.py report --original results/llm_judge_dev_<ts>.jsonl     --padded results/llm_judge_<ts>.jsonl
 ```
 
+**Interface:** see every result and start runs from the browser:
+
+```bash
+python scripts/dashboard_server.py     # opens http://localhost:8765
+```
+
+Tabs: overview, judge vs humans per item, position bias, verbosity bias,
+runs and cost, and **Run tests** (buttons for the judge, both bias tests
+and the unit tests, with live output). Without the server,
+`python scripts/build_dashboard.py` writes a read-only
+`results/dashboard.html`.
+
 Agreement reports:
 
 ```bash
