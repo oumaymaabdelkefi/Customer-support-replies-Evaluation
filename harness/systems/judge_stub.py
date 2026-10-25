@@ -17,9 +17,13 @@ Setup:
     export GROQ_API_KEY=gsk_...      (never commit this)
 
 Rate limits: Groq's free tier is generous but still finite and can return
-429s under bursty load. This module retries with backoff on 429/5xx,
-reading the API's suggested retry delay when present, same pattern as the
-previous Gemini-backed version of this file.
+429s under bursty load, especially on a run of 70+ items back to back.
+This module retries with backoff on 429/5xx, printing progress so a long
+wait doesn't look like a frozen terminal, and paces requests slightly to
+avoid tripping the limit in the first place. The openai SDK's own built-in
+retry logic is disabled (max_retries=0) because it retries silently
+*before* our code sees the exception -- that silent sleep is what looked
+like a hang and got Ctrl+C'd in testing.
 """
 
 from __future__ import annotations
@@ -38,8 +42,10 @@ BASE_URL = "https://api.groq.com/openai/v1"
 
 MAX_RETRIES = 4
 DEFAULT_RETRY_DELAY_SECONDS = 20.0  # fallback if the API doesn't say how long to wait
+MIN_SECONDS_BETWEEN_CALLS = 1.5  # light pacing so a 70+ item run doesn't burst into a 429
 
 _PROMPT_TEMPLATE: str | None = None
+_last_call_time: float = 0.0  # module-level, shared across calls in one run
 
 
 def _load_template() -> str:
@@ -79,6 +85,18 @@ def _extract_json(raw_text: str) -> dict:
     return json.loads(text)  # let json.JSONDecodeError propagate on bad output
 
 
+def _throttle():
+    """Block until at least MIN_SECONDS_BETWEEN_CALLS has passed since the
+    last call this process made -- cheap insurance against tripping the
+    rate limit on a long batch."""
+    global _last_call_time
+    elapsed = time.monotonic() - _last_call_time
+    wait = MIN_SECONDS_BETWEEN_CALLS - elapsed
+    if wait > 0:
+        time.sleep(wait)
+    _last_call_time = time.monotonic()
+
+
 def _extract_retry_delay(error) -> float:
     """Groq's 429 responses (OpenAI-compatible) often include a suggested
     wait in the message (e.g. 'try again in 12.4s'). Parse it if present;
@@ -109,12 +127,17 @@ def llm_judge(item: ItemInput) -> dict:
             "hard-code it or commit it."
         )
 
-    client = openai.OpenAI(api_key=api_key, base_url=BASE_URL)
+    # max_retries=0: the SDK's own built-in retry logic sleeps *silently*
+    # before our except block ever runs, which on a long 429 backoff looks
+    # exactly like a frozen terminal. Disabling it means every retry goes
+    # through our own loop below, which prints what it's doing.
+    client = openai.OpenAI(api_key=api_key, base_url=BASE_URL, max_retries=0)
     prompt = _build_prompt(item)
 
     last_error: Exception | None = None
     response = None
     for attempt in range(1, MAX_RETRIES + 1):
+        _throttle()
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
@@ -132,6 +155,10 @@ def llm_judge(item: ItemInput) -> dict:
                     f"Groq API call failed after {attempt} attempt(s): {e}"
                 ) from e
             delay = _extract_retry_delay(e)
+            print(
+                f"  [{item.item_id}] Groq rate-limited (attempt {attempt}/{MAX_RETRIES}), "
+                f"waiting {delay:.0f}s before retrying..."
+            )
             time.sleep(delay)
     else:  # pragma: no cover -- defensive, loop always breaks or raises above
         raise RuntimeError(f"Groq API call failed: {last_error}")
