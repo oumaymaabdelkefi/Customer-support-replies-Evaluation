@@ -37,6 +37,18 @@ NEEDS_KEY = {"judge", "position", "verbosity"}
 MAX_LOG_CHARS = 200_000
 
 
+def latest_padded_run() -> Path | None:
+    """Newest results file that judged padded (~pad) items, if any."""
+    results = REPO_ROOT / "results"
+    candidates = []
+    for path in results.glob("llm_judge_*.jsonl"):
+        with open(path, encoding="utf-8") as f:
+            first = f.readline()
+        if '~pad"' in first:
+            candidates.append(path)
+    return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
+
+
 def task_commands(task: str, split: str) -> list[list[str]]:
     split_args = ["--split", split] if split in ("dev", "test") else []
     if task == "judge":
@@ -46,9 +58,13 @@ def task_commands(task: str, split: str) -> list[list[str]]:
     if task == "position":
         return [PY + ["scripts/position_bias.py"]]
     if task == "verbosity":
+        # Continue the newest padded run if there is one, so a run cut short
+        # by the free-tier daily quota picks up where it stopped tomorrow.
+        resume = latest_padded_run()
+        resume_args = ["--resume", str(resume.relative_to(REPO_ROOT))] if resume else []
         return [
             PY + ["scripts/verbosity_bias.py", "make", *split_args],
-            PY + ["-m", "harness.run", "--system", "llm_judge", "--items", "data/bias/verbosity_padded.jsonl"],
+            PY + ["-m", "harness.run", "--system", "llm_judge", "--items", "data/bias/verbosity_padded.jsonl", *resume_args],
         ]
     if task == "tests":
         return [PY + ["-m", "pytest", "tests", "-q"]]

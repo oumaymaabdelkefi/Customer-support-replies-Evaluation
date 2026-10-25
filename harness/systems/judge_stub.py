@@ -227,10 +227,16 @@ def call_groq(prompt: str, response_format: dict, label: str) -> dict:
                     f"Groq API call failed after {attempt} attempt(s): {e}"
                 ) from e
             delay = _extract_retry_delay(e)
-            print(
-                f"  [{label}] Groq rate-limited (attempt {attempt}/{MAX_RETRIES}), "
-                f"waiting {delay:.0f}s before retrying..."
-            )
+            try:
+                print(
+                    f"  [{label}] Groq rate-limited (attempt {attempt}/{MAX_RETRIES}), "
+                    f"waiting {delay:.0f}s before retrying...",
+                    flush=True,
+                )
+            except OSError:
+                # Progress output is best-effort: if whoever started this run
+                # (e.g. the dashboard server) has gone away, keep judging.
+                pass
             time.sleep(delay)
     else:  # pragma: no cover -- defensive, loop always breaks or raises above
         raise RuntimeError(f"Groq API call failed: {last_error}")

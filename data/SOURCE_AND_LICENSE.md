@@ -88,3 +88,18 @@ the team wants to revisit this decision with the instructor.
   instructions with team-written material, as documented here, satisfies
   "collecting real examples" for the golden-set requirement — or whether
   the final 150+ set should lean more heavily on one or the other.
+
+## Stage-2 items G69-G130 (AI-drafted)
+
+The 62 items G69-G130 were drafted with an AI assistant (Claude) to bring
+the golden set to 150 items, and are marked `"source": "llm_drafted"` in
+`golden_sample_stage2.jsonl`. Customer messages and replies are invented;
+every policy excerpt is copied word for word from `policy_technest.md`
+(enforced by `scripts/merge_golden_set.py`). They are spread over all four
+themes and cover correct replies, policy contradictions, missing details,
+rude-but-correct replies, GEN-1 "check and get back to you" promises,
+right-answer-wrong-reason, policy gaps (escalated vs. invented) and
+effusive or padded replies. `challenge_type`/`author_note` record the
+drafting intent only; the labels come from the two human labellers, who
+label blind via `labelling_sheet_stage2.xlsx` (no intent fields shown).
+The team should review these items before relying on them.
