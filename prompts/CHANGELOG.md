@@ -48,3 +48,23 @@ kappa 0.810, completeness kappa 0.688 -- all above the brief's 0.6
 target. This is now the v1 baseline; a future prompt revision (v2) should
 be compared against these numbers on the same 20 items before being
 adopted.
+
+## judge_v1 -- 2026-10-25 (implementation notes, no prompt-text change)
+
+Harness/judge plumbing changes. The prompt wording is unchanged, so this
+stays v1, but the first change affects how the model's answer is decoded,
+so the v1 agreement numbers should be re-measured on the same items before
+being compared to any v2.
+
+- Structured output: the judge now sends a strict JSON schema
+  (`response_format=json_schema`, `strict: true`) matching
+  `harness.schema.JudgeOutput`, so scores are constrained at decode time
+  instead of relying on the model following "return JSON only".
+- Cost and latency per judged item are recorded in each result row's
+  `meta` field (prompt/completion tokens, latency, USD cost at Groq's
+  listed $0.15 / $0.60 per 1M input/output tokens) and summarised after
+  every run.
+- Groq's daily token quota (TPD) is no longer retried: the run stops
+  calling the API and marks the remaining items as skipped. Previously
+  each item burned 4 retries against a limit that resets only daily
+  (see results/llm_judge_1790607252.jsonl).

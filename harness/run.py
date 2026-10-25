@@ -20,6 +20,7 @@ import time
 import traceback
 from pathlib import Path
 
+from harness.errors import QuotaExhausted
 from harness.metrics import summarize
 from harness.schema import ItemInput, ScoredRow, validate_system_output
 from harness.systems.baselines import SYSTEMS as BASELINE_SYSTEMS
@@ -64,6 +65,8 @@ def resolve_system(name: str):
 def run_system_on_item(system_fn, item: ItemInput) -> ScoredRow:
     try:
         raw = system_fn(item)
+    except QuotaExhausted:
+        raise  # run() handles this: it ends the API calls for the whole run
     except NotImplementedError as e:
         return ScoredRow(item_id=item.item_id, input=item, parse_error=str(e))
     except Exception:  # noqa: BLE001 -- a broken system must not crash the run
@@ -73,6 +76,8 @@ def run_system_on_item(system_fn, item: ItemInput) -> ScoredRow:
             parse_error=f"system raised an exception:\n{traceback.format_exc()}",
         )
 
+    meta = raw.pop("_meta", None) if isinstance(raw, dict) else None
+
     output, error = validate_system_output(raw)
     if error is not None:
         return ScoredRow(
@@ -80,13 +85,16 @@ def run_system_on_item(system_fn, item: ItemInput) -> ScoredRow:
             input=item,
             parse_error=error,
             raw_response=json.dumps(raw, ensure_ascii=False),
+            meta=meta,
         )
 
     return ScoredRow(
         item_id=item.item_id,
         input=item,
         output=output,
+        score=ScoredRow.total_score(output),
         passed=ScoredRow.overall_pass(output),
+        meta=meta,
     )
 
 
@@ -95,8 +103,23 @@ def run(system_name: str, items_path: Path) -> Path:
     system_fn = resolve_system(system_name)
 
     rows: list[ScoredRow] = []
+    quota_error: str | None = None
     for item in items:
-        rows.append(run_system_on_item(system_fn, item))
+        if quota_error is None:
+            try:
+                rows.append(run_system_on_item(system_fn, item))
+                continue
+            except QuotaExhausted as e:
+                quota_error = str(e)
+                print(f"\n{quota_error}\nSkipping the remaining items.", file=sys.stderr)
+        # Still one row per item, so a partial run is visibly partial.
+        rows.append(
+            ScoredRow(
+                item_id=item.item_id,
+                input=item,
+                parse_error=f"skipped: quota exhausted earlier in this run ({quota_error})",
+            )
+        )
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = RESULTS_DIR / f"{system_name}_{int(time.time())}.jsonl"

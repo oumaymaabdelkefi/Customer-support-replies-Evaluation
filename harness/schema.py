@@ -55,9 +55,18 @@ class ScoredRow(BaseModel):
     item_id: str
     input: ItemInput
     output: JudgeOutput | None = None
+    score: int | None = None  # correctness + politeness + completeness, 0-6
     passed: bool | None = None
     parse_error: str | None = None
     raw_response: str | None = None
+    # Per-call cost/latency info a system chooses to report (tokens,
+    # latency_s, cost_usd, ...). Kept apart from `output` so it never
+    # affects schema validation of the scores themselves.
+    meta: dict | None = None
+
+    @staticmethod
+    def total_score(output: JudgeOutput) -> int:
+        return output.correctness + output.politeness + output.completeness
 
     @staticmethod
     def overall_pass(output: JudgeOutput) -> bool:
