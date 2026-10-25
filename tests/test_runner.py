@@ -109,3 +109,36 @@ def test_quota_exhausted_skips_remaining_items(tmp_path, monkeypatch):
     assert len(rows) == 20  # still one row per item
     assert [r["output"] is not None for r in rows[:2]] == [True, True]
     assert all(r["parse_error"].startswith("skipped: quota exhausted") for r in rows[2:])
+
+
+def test_resume_reruns_only_failed_and_skipped_items(tmp_path, monkeypatch):
+    monkeypatch.setattr("harness.run.RESULTS_DIR", tmp_path)
+
+    # Day 1: quota runs out on the 3rd item.
+    day1_calls = []
+
+    def day1_judge(item):
+        day1_calls.append(item.item_id)
+        if len(day1_calls) == 3:
+            raise QuotaExhausted("daily limit")
+        return _fake_judge(item)
+
+    monkeypatch.setattr("harness.run.resolve_system", lambda name: day1_judge)
+    first = run("fake", PILOT_ITEMS)
+
+    # Day 2: resume -- only the 18 unscored items should be sent again.
+    day2_calls = []
+
+    def day2_judge(item):
+        day2_calls.append(item.item_id)
+        return _fake_judge(item)
+
+    monkeypatch.setattr("harness.run.resolve_system", lambda name: day2_judge)
+    monkeypatch.setattr("harness.run.time.time", lambda: 9999999999)  # distinct filename
+    second = run("fake", PILOT_ITEMS, resume_from=first)
+
+    rows = [json.loads(line) for line in second.read_text().strip().splitlines()]
+    assert len(day2_calls) == 18
+    assert "P01" not in day2_calls and "P02" not in day2_calls
+    assert len(rows) == 20
+    assert all(r["output"] is not None for r in rows)

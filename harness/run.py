@@ -98,13 +98,35 @@ def run_system_on_item(system_fn, item: ItemInput) -> ScoredRow:
     )
 
 
-def run(system_name: str, items_path: Path) -> Path:
+def load_reusable_rows(path: Path) -> dict[str, ScoredRow]:
+    """Rows from an earlier run that scored successfully, keyed by item_id.
+    Used by --resume so a run cut short by a free-tier quota can be
+    finished later without paying (in quota) for items already scored."""
+    reusable = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                row = ScoredRow.model_validate_json(line)
+                if row.output is not None:
+                    reusable[row.item_id] = row
+    return reusable
+
+
+def run(system_name: str, items_path: Path, resume_from: Path | None = None) -> Path:
     items = load_items(items_path)
     system_fn = resolve_system(system_name)
+    reusable = load_reusable_rows(resume_from) if resume_from else {}
 
     rows: list[ScoredRow] = []
+    reused = 0
     quota_error: str | None = None
     for item in items:
+        previous = reusable.get(item.item_id)
+        # Only reuse a row if the item text is unchanged since that run.
+        if previous is not None and previous.input == item:
+            rows.append(previous)
+            reused += 1
+            continue
         if quota_error is None:
             try:
                 rows.append(run_system_on_item(system_fn, item))
@@ -134,6 +156,8 @@ def run(system_name: str, items_path: Path) -> Path:
         wrote = out_path
     print(f"\nSystem: {system_name}")
     print(f"Items:  {len(rows)}")
+    if resume_from:
+        print(f"Reused: {reused} already-scored rows from {resume_from}")
     print(f"Wrote:  {wrote}\n")
     print(summary.render())
 
@@ -153,13 +177,22 @@ def main():
         type=Path,
         help="Path to a jsonl item file (e.g. data/pilot_items.jsonl)",
     )
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        help="Earlier results jsonl: reuse its successfully scored rows and "
+        "only re-run items that failed or were skipped (e.g. after hitting "
+        "a free-tier daily quota)",
+    )
     args = parser.parse_args()
 
-    if not args.items.exists():
-        print(f"error: {args.items} not found", file=sys.stderr)
-        sys.exit(1)
+    for path in (args.items, args.resume):
+        if path is not None and not path.exists():
+            print(f"error: {path} not found", file=sys.stderr)
+            sys.exit(1)
 
-    run(args.system, args.items)
+    run(args.system, args.items, resume_from=args.resume)
 
 
 if __name__ == "__main__":

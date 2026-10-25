@@ -29,6 +29,20 @@ $env:GROQ_API_KEY = "gsk_..."        # PowerShell
 python -m harness.run --system llm_judge --items data/golden_set.jsonl
 ```
 
+**Free tier:** the judge runs on Groq's free tier. On `gpt-oss-120b` the
+free tier allows about 200k tokens per day, roughly 115 judged items at
+~1.7k tokens each. If a run hits that limit, the remaining items are
+marked as skipped. Finish the run the next day without re-paying for
+items already scored:
+
+```bash
+python -m harness.run --system llm_judge --items data/golden_set.jsonl     --resume results/llm_judge_<timestamp>.jsonl
+```
+
+`cost_usd` in each row's `meta` is what the call *would* cost on Groq's
+paid tier. Actual spend on the free tier is $0. The paid-tier figure is
+the basis for the cost model (cost per 1k requests, today and at 100x).
+
 Other systems: `always_perfect`, `keyword_baseline`. Each run writes one
 row per item to `results/<system>_<timestamp>.jsonl` and prints a summary.
 
