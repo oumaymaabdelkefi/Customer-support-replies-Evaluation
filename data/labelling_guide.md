@@ -152,10 +152,10 @@ omission.
 
 ## Process for stage 2 (items G29-G130)
 
-1. Labellers use `data/labelling_sheet_stage2.xlsx` (one personal copy
-   each: `data/labels/labelling_stage2_labeller1.xlsx`,
-   `..._labeller2.xlsx`). The sheet shows only the message, the excerpt
-   and the reply — no design notes.
+1. Labellers use a personal copy of `data/labelling_sheet_stage2.xlsx`
+   (built by `scripts/make_labelling_xlsx.py`). The sheet shows only the
+   message, the excerpt and the reply — no design notes. Filled sheets
+   are kept in `data/labels/` and imported with `scripts/import_labels.py`.
 2. Keep the same labeller numbers as for the first 48 items, so each
    person's labels for all 150 items line up.
 3. Work **alone**. Do not commit or share a filled sheet until both
