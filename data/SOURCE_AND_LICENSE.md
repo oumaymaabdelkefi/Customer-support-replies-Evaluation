@@ -49,7 +49,7 @@ Every row in `pilot_items.jsonl` carries:
   kept whenever `adapted` is `true`, so the edit is auditable.
 
 13 of the 20 pilot items are Bitext-sourced (6 used verbatim, 7 adapted);
-7 are team-written. See `pilot_items.jsonl` / `pilot_items.csv` for the
+7 are team-written. See `pilot_items.jsonl` for the
 full per-item breakdown.
 
 ## Golden set, stage 1 (`golden_sample_stage1.jsonl`, 28 items)

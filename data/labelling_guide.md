@@ -119,8 +119,12 @@ surfaced two situations the rules above don't quite cover:
 
 ## Process for this pilot
 
-1. Two teammates each take a **blank, independent** copy of the sheet
-   (`labelling_sheet_labeler1.csv`, `labelling_sheet_labeler2.csv`).
+1. Two teammates each take a **blank, independent** copy of the sheet.
+   Completed sheets for the first 48 items are
+   `labelling_sheet_labeler1_completed.csv` /
+   `labelling_sheet_labeler2_completed.csv`; the stage-2 items (G29-G58)
+   use `labelling_sheet_labeler1_stage2.csv` /
+   `labelling_sheet_labeler2_stage2.csv`.
    Do not look at each other's sheet while labelling.
 2. Score every item's three axes plus a short note.
 3. Compare the two completed sheets. For every item where scores differ,
@@ -133,9 +137,8 @@ surfaced two situations the rules above don't quite cover:
    small to compute a meaningful Cohen's kappa; that's done on the full
    150+ set).
 
-The same process (steps 1-5) applies to `golden_sample_stage1.jsonl`,
-using `labelling_sheet_golden_sample_labeler1.csv` /
-`..._labeler2.csv` instead — it's a separate 28-item batch, not the
+The same process (steps 1-5) applies to `golden_sample_stage1.jsonl`
+(its rows are in the same `_completed.csv` sheets) — it's a separate 28-item batch, not the
 pilot, and needs its own independent double-labelling before we decide
 whether this sourcing method is ready to scale to 150+ (see
 `GOLDEN_SAMPLE_REVIEW.md`, "What's next").
