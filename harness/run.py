@@ -27,6 +27,7 @@ from harness.systems.baselines import SYSTEMS as BASELINE_SYSTEMS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = REPO_ROOT / "results"
+SPLITS_PATH = REPO_ROOT / "data" / "splits.json"
 
 # Fields a system is allowed to see. Pilot items carry extra internal-only
 # fields (challenge_type, author_note, source, ...) that must never reach
@@ -48,6 +49,22 @@ def load_items(path: Path) -> list[ItemInput]:
                 raise ValueError(f"{path}:{line_no} missing fields {missing}")
             items.append(ItemInput.model_validate(trimmed))
     return items
+
+
+def filter_split(items: list[ItemInput], split: str, splits_path: Path | None = None) -> list[ItemInput]:
+    """Keep only the items assigned to `split` ("dev" or "test") in
+    data/splits.json (written by scripts/split_golden_set.py)."""
+    splits_path = splits_path or SPLITS_PATH
+    if not splits_path.exists():
+        raise ValueError(f"{splits_path} not found -- run scripts/split_golden_set.py first")
+    assignments = json.loads(splits_path.read_text(encoding="utf-8"))["items"]
+    missing = [i.item_id for i in items if i.item_id not in assignments]
+    if missing:
+        raise ValueError(
+            f"{len(missing)} items have no split (e.g. {missing[:5]}) -- "
+            "re-run scripts/split_golden_set.py to assign new items"
+        )
+    return [i for i in items if assignments[i.item_id] == split]
 
 
 def resolve_system(name: str):
@@ -112,8 +129,15 @@ def load_reusable_rows(path: Path) -> dict[str, ScoredRow]:
     return reusable
 
 
-def run(system_name: str, items_path: Path, resume_from: Path | None = None) -> Path:
+def run(
+    system_name: str,
+    items_path: Path,
+    resume_from: Path | None = None,
+    split: str | None = None,
+) -> Path:
     items = load_items(items_path)
+    if split:
+        items = filter_split(items, split)
     system_fn = resolve_system(system_name)
     reusable = load_reusable_rows(resume_from) if resume_from else {}
 
@@ -144,7 +168,8 @@ def run(system_name: str, items_path: Path, resume_from: Path | None = None) -> 
         )
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = RESULTS_DIR / f"{system_name}_{int(time.time())}.jsonl"
+    tag = f"{system_name}_{split}" if split else system_name
+    out_path = RESULTS_DIR / f"{tag}_{int(time.time())}.jsonl"
     with open(out_path, "w", encoding="utf-8") as f:
         for row in rows:
             f.write(row.model_dump_json() + "\n")
@@ -155,7 +180,7 @@ def run(system_name: str, items_path: Path, resume_from: Path | None = None) -> 
     except ValueError:
         wrote = out_path
     print(f"\nSystem: {system_name}")
-    print(f"Items:  {len(rows)}")
+    print(f"Items:  {len(rows)}" + (f" ({split} split)" if split else ""))
     if resume_from:
         print(f"Reused: {reused} already-scored rows from {resume_from}")
     print(f"Wrote:  {wrote}\n")
@@ -185,6 +210,13 @@ def main():
         "only re-run items that failed or were skipped (e.g. after hitting "
         "a free-tier daily quota)",
     )
+    parser.add_argument(
+        "--split",
+        choices=["dev", "test"],
+        default=None,
+        help="Only run items in this split (see data/splits.json). Tune "
+        "prompts on dev; use test only to report final results.",
+    )
     args = parser.parse_args()
 
     for path in (args.items, args.resume):
@@ -192,7 +224,7 @@ def main():
             print(f"error: {path} not found", file=sys.stderr)
             sys.exit(1)
 
-    run(args.system, args.items, resume_from=args.resume)
+    run(args.system, args.items, resume_from=args.resume, split=args.split)
 
 
 if __name__ == "__main__":

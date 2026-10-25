@@ -46,6 +46,27 @@ the basis for the cost model (cost per 1k requests, today and at 100x).
 Other systems: `always_perfect`, `keyword_baseline`. Each run writes one
 row per item to `results/<system>_<timestamp>.jsonl` and prints a summary.
 
+**Dev/test split** (`data/splits.json`, made by
+`scripts/split_golden_set.py`): tune prompts on `dev`, report final
+numbers on `test` only. Re-run the split script after adding items; it
+assigns only new items and never moves existing ones.
+
+```bash
+python -m harness.run --system llm_judge --items data/golden_set.jsonl --split dev
+```
+
+Judge bias checks:
+
+```bash
+# Position bias: pairs of replies to the same message, judged in both orders
+python scripts/position_bias.py
+
+# Verbosity bias: pad replies with content-free filler, re-judge, compare
+python scripts/verbosity_bias.py make --split dev
+python -m harness.run --system llm_judge --items data/bias/verbosity_padded.jsonl
+python scripts/verbosity_bias.py report --original results/llm_judge_dev_<ts>.jsonl     --padded results/llm_judge_<ts>.jsonl
+```
+
 Agreement reports:
 
 ```bash

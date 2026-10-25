@@ -173,7 +173,12 @@ def _cost_usd(prompt_tokens: int, completion_tokens: int) -> float:
     ) / 1_000_000
 
 
-def llm_judge(item: ItemInput) -> dict:
+def call_groq(prompt: str, response_format: dict, label: str) -> dict:
+    """One chat-completion call to Groq with retry/backoff, returning the
+    parsed JSON object plus a "_meta" dict (tokens, latency, cost).
+    Shared by the single-reply judge below and the pairwise judge used
+    for the position-bias test (scripts/position_bias.py). `label` only
+    appears in progress messages."""
     try:
         import openai
     except ImportError as e:
@@ -195,7 +200,6 @@ def llm_judge(item: ItemInput) -> dict:
     # exactly like a frozen terminal. Disabling it means every retry goes
     # through our own loop below, which prints what it's doing.
     client = openai.OpenAI(api_key=api_key, base_url=BASE_URL, max_retries=0)
-    prompt = _build_prompt(item)
 
     last_error: Exception | None = None
     response = None
@@ -208,7 +212,7 @@ def llm_judge(item: ItemInput) -> dict:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,  # deterministic-as-possible grading, not creative writing
                 max_tokens=2048,  # generous headroom in case the model reasons before answering
-                response_format=JUDGE_RESPONSE_FORMAT,
+                response_format=response_format,
             )
             latency_s = time.monotonic() - started
             break  # success -- fall through to JSON parsing below
@@ -224,7 +228,7 @@ def llm_judge(item: ItemInput) -> dict:
                 ) from e
             delay = _extract_retry_delay(e)
             print(
-                f"  [{item.item_id}] Groq rate-limited (attempt {attempt}/{MAX_RETRIES}), "
+                f"  [{label}] Groq rate-limited (attempt {attempt}/{MAX_RETRIES}), "
                 f"waiting {delay:.0f}s before retrying..."
             )
             time.sleep(delay)
@@ -257,3 +261,7 @@ def llm_judge(item: ItemInput) -> dict:
     if isinstance(parsed, dict):
         parsed["_meta"] = meta
     return parsed
+
+
+def llm_judge(item: ItemInput) -> dict:
+    return call_groq(_build_prompt(item), JUDGE_RESPONSE_FORMAT, item.item_id)

@@ -142,3 +142,37 @@ def test_resume_reruns_only_failed_and_skipped_items(tmp_path, monkeypatch):
     assert "P01" not in day2_calls and "P02" not in day2_calls
     assert len(rows) == 20
     assert all(r["output"] is not None for r in rows)
+
+
+def test_split_filters_items(tmp_path, monkeypatch):
+    monkeypatch.setattr("harness.run.RESULTS_DIR", tmp_path)
+    splits = tmp_path / "splits.json"
+    assignments = {f"P{n:02d}": ("dev" if n <= 5 else "test") for n in range(1, 21)}
+    splits.write_text(json.dumps({"items": assignments}))
+    monkeypatch.setattr("harness.run.SPLITS_PATH", splits)
+
+    out_path = run("always_perfect", PILOT_ITEMS, split="dev")
+    rows = [json.loads(line) for line in out_path.read_text().strip().splitlines()]
+    assert [r["item_id"] for r in rows] == ["P01", "P02", "P03", "P04", "P05"]
+    assert "_dev_" in out_path.name
+
+
+def test_split_refuses_unassigned_items(tmp_path, monkeypatch):
+    splits = tmp_path / "splits.json"
+    splits.write_text(json.dumps({"items": {"P01": "dev"}}))
+    monkeypatch.setattr("harness.run.SPLITS_PATH", splits)
+    with pytest.raises(ValueError, match="no split"):
+        run("always_perfect", PILOT_ITEMS, split="dev")
+
+
+def test_committed_splits_cover_golden_set_and_keep_pairs_together():
+    from harness.run import SPLITS_PATH
+
+    assignments = json.loads(SPLITS_PATH.read_text())["items"]
+    golden = [json.loads(l) for l in (REPO_ROOT / "data" / "golden_set.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert {g["item_id"] for g in golden} <= set(assignments)
+    by_message = {}
+    for g in golden:
+        key = " ".join(g["customer_message"].lower().split())
+        by_message.setdefault(key, set()).add(assignments[g["item_id"]])
+    assert all(len(splits) == 1 for splits in by_message.values())

@@ -68,3 +68,15 @@ being compared to any v2.
   calling the API and marks the remaining items as skipped. Previously
   each item burned 4 retries against a limit that resets only daily
   (see results/llm_judge_1790607252.jsonl).
+
+## pairwise_v1 -- 2026-10-25
+
+New prompt, used only by the position-bias test
+(`scripts/position_bias.py`), not by the main harness. It asks which of
+two replies to the same customer message is better, ranking correctness
+over completeness over politeness, with the same rule wording as
+judge_v1. Output is a strict JSON schema: `winner` (A / B / tie) and a
+one-sentence `reason`. It tells the model that length and order are not
+criteria. The bias test measures whether it actually ignores them.
+
+No score yet: first run pending (10 pairs x 2 orders = 20 calls).

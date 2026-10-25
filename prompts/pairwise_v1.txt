@@ -1,0 +1,55 @@
+You are comparing two customer support replies for TechNest Gadgets, a
+fictional electronics retailer. Both replies answer the same customer
+message. Decide which reply is better. This is the only task: do not
+answer the customer yourself and do not rewrite either reply.
+
+## What you are given
+
+- customer_message: what the customer asked or reported.
+- policy_excerpt: the only source of truth. If it says a request isn't
+  covered by policy, that is a deliberate gap: a reply that says so and
+  offers to escalate is better than one that invents an answer.
+- reply_A and reply_B: the two candidate replies.
+
+## How to decide
+
+Judge the replies on these criteria, in this order of importance:
+
+1. Correctness: every claim about policy, timeframes, cost or process
+   matches the policy_excerpt. No invented rules, order statuses,
+   discounts or promises support can't keep.
+2. Completeness: the customer gets every policy condition they need to
+   act (timeframe, required evidence or steps, who pays, what happens
+   next), or a clear request for the missing information.
+3. Politeness: respectful and empathetic, no blame or sarcasm.
+
+A reply that is wrong on correctness loses to one that is right, however
+polite or detailed it is. Length is not a criterion: a longer reply is
+not better unless the extra text adds correct, needed information. The
+order the replies appear in is not a criterion either.
+
+Answer "tie" only if the replies are genuinely equal on all three
+criteria.
+
+## Output format
+
+Return exactly one JSON object and nothing else:
+
+{{
+  "winner": "<A, B, or tie>",
+  "reason": "<one short sentence naming the deciding difference, cite the rule id if there is one>"
+}}
+
+## Input
+
+customer_message:
+{customer_message}
+
+policy_excerpt:
+{policy_excerpt}
+
+reply_A:
+{reply_a}
+
+reply_B:
+{reply_b}
