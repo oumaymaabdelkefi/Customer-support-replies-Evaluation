@@ -45,7 +45,7 @@ def build(labeller):
 
     # ---------------- Instructions ----------------
     ins = wb.active
-    ins.title = "Instructions"
+    ins.title = "Scoring rules"
     ins.column_dimensions["A"].width = 24
     ins.column_dimensions["B"].width = 95
     ins.sheet_view.showGridLines = False
@@ -113,7 +113,7 @@ def build(labeller):
     ws = wb.create_sheet("Labels")
     headers = ["Item", "Theme", "Customer message", "Policy excerpt", "Reply to grade",
                "Correctness", "Politeness", "Completeness", "Notes"]
-    widths = [8, 15, 34, 48, 52, 12, 11, 13, 40]
+    widths = [7, 12, 30, 42, 46, 12, 11, 13, 36]
     for col, (h, w) in enumerate(zip(headers, widths), start=1):
         c = ws.cell(1, col, h)
         c.font = f(bold=True, color="FFFFFF")
@@ -152,7 +152,11 @@ def build(labeller):
     ws.freeze_panes = "C2"
     ws.auto_filter.ref = f"A1:I{last}"
 
+    # Open straight onto the items to label; the rules tab is reference only.
+    wb.move_sheet("Labels", offset=-1)
     wb.active = 0
+    ins.sheet_view.tabSelected = False
+    ws.sheet_view.tabSelected = True
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
     return wb
 
@@ -160,15 +164,19 @@ def build(labeller):
 def main():
     (DATA / "labels").mkdir(exist_ok=True)
     targets = {
-        None: DATA / "labelling_sheet_stage2.xlsx",
         1: DATA / "labels" / "labelling_stage2_labeller1.xlsx",
         2: DATA / "labels" / "labelling_stage2_labeller2.xlsx",
+        None: DATA / "labelling_sheet_stage2.xlsx",
     }
     for labeller, path in targets.items():
         if labeller is not None and path.exists():
             print(f"kept {path.relative_to(REPO_ROOT)} (already exists -- may contain labels)")
             continue
-        build(labeller).save(path)
+        try:
+            build(labeller).save(path)
+        except PermissionError:
+            print(f"SKIPPED {path.relative_to(REPO_ROOT)}: it is open in Excel -- close it and re-run")
+            continue
         print(f"wrote {path.relative_to(REPO_ROOT)} ({len(rows)} items)")
 
 
