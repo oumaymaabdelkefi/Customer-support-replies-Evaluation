@@ -14,3 +14,6 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Excel lock files (created while a workbook is open)
+~$*

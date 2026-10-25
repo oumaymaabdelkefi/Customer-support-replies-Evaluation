@@ -1,8 +1,10 @@
-# Labelling Guide — Customer Support Reply Grading (Pilot v0.1)
+# Labelling Guide — Customer Support Reply Grading (v0.3)
 
-Team SupportScore, Project 1 (The Grader). This guide covers the **pilot
-set** (`pilot_items.jsonl`, 20 items). It will be revised once we run the
-full 150+ golden set, based on real disagreements between labellers.
+Team SupportScore, Project 1 (The Grader). This guide covers all 150
+items of the golden set (`golden_set.jsonl`). Version history: v0.1 for
+the 20-item pilot, v0.2 addendum after the first real-data batch, v0.3
+(this version) after the first judge-vs-human comparison — see the
+"Addendum (v0.3)" section near the end.
 
 ## What you are grading
 
@@ -117,7 +119,56 @@ surfaced two situations the rules above don't quite cover:
   confident, specific answer, since there's no rule to be correct
   *against*.
 
-## Process for this pilot
+## Addendum (v0.3): omissions affect completeness, not correctness
+
+Our first comparison showed the most common disagreement — between the two
+labellers and between the labellers and the judge — was a reply that
+**leaves out** a rule that applies (e.g. never mentions that an address
+can only be changed while the order is "Processing", or answers a damage
+report without the 7-day window and photos), without saying anything
+wrong. Some of us lowered correctness for this, some only completeness.
+
+**Rule from v0.3 on:**
+
+- **Correctness judges only what the reply *says* (or promises).** Lower
+  it when a statement contradicts the excerpt, a rule/status/date/discount
+  is invented, a confident answer is given where the policy has a gap, or
+  a promise is made that support can't keep (GEN-1). Do **not** lower
+  correctness just because something relevant is missing.
+- **Completeness judges what is *missing*.** A reply that omits a required
+  condition, step or timeframe loses completeness (1 if one detail is
+  missing, 0 if the customer is left with no real next step).
+- **Exception — an omission that makes a statement false.** If leaving
+  out a condition turns what the reply *does* say into a wrong promise
+  (e.g. "you can change your address anytime" when the policy says only
+  while Processing), that statement is wrong, so correctness drops too.
+  The test: is there a sentence in the reply you could point to and say
+  "that's not true under this policy"? If yes, correctness; if no,
+  completeness only.
+
+The first 48 items were labelled before this rule. When resolving their
+disagreements, re-check correctness scores that were lowered only for an
+omission.
+
+## Process for stage 2 (items G29-G130)
+
+1. Labellers use `data/labelling_sheet_stage2.xlsx` (one personal copy
+   each: `data/labels/labelling_stage2_labeller1.xlsx`,
+   `..._labeller2.xlsx`). The sheet shows only the message, the excerpt
+   and the reply — no design notes.
+2. Keep the same labeller numbers as for the first 48 items, so each
+   person's labels for all 150 items line up.
+3. Work **alone**. Do not commit or share a filled sheet until both
+   labellers are finished, so neither can see the other's answers.
+4. Don't label items you wrote yourself (you know what they were designed
+   to test): mark them `NA` with the note "I wrote this item".
+5. When both are done, commit both files; scores are then imported into
+   `labelling_sheet_labeler1_stage2.csv` / `labelling_sheet_labeler2_stage2.csv`
+   and agreement is computed on all 150 items.
+6. Then discuss disagreements, record agreed final labels, and keep both
+   original independent labels (the disagreement rate is reported).
+
+## Process used for the pilot and stage 1 (items P01-P20, G01-G28)
 
 1. Two teammates each take a **blank, independent** copy of the sheet.
    Completed sheets for the first 48 items are
