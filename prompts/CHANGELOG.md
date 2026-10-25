@@ -105,3 +105,10 @@ count against correctness at all?
 
 Position bias (pairwise_v1, `results/position_bias_1792945160.jsonl`):
 0/10 verdicts changed after swapping order; first-shown reply won 10/20.
+
+Run-to-run stability (same prompt, same 43 dev items, temperature 0,
+`llm_judge_dev_1792945689` vs `llm_judge_dev_1792945992`): all three
+scores identical on 39/43 items (91%). Correctness 43/43, politeness
+42/43, completeness 40/43. The 4 changes were each one step on one axis
+(P18 politeness 1->0; G08, G31, G60 completeness 1->0), so agreement
+numbers carry roughly that much noise between runs.
